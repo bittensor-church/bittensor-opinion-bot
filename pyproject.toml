@@ -31,6 +31,7 @@ dependencies = [
     "channels-redis~=4.2.0",
     "uvicorn[standard]==0.29",
     "pydantic~=2.0",
+    "discord-py~=2.4",
 ]
 
 [build-system]
