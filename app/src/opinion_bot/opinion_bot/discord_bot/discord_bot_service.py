@@ -9,6 +9,7 @@ from typing import Final
 
 import discord
 import structlog
+from discord import app_commands
 
 logger = structlog.get_logger(__name__)
 
@@ -35,6 +36,13 @@ def start_in_background() -> None:
         logger.warning("discord_bot.missing_token", env_var="DISCORD_BOT_TOKEN")
         return
 
+    try:
+        guild_id = int(os.environ.get("DISCORD_GUILD_ID"))
+    except ValueError:
+        logger.warning("discord_bot.guild_id_missing_or_invalid", env_var="DISCORD_GUILD_ID")
+        return
+    guild = discord.Object(id=guild_id) # FIXME: do we need check for error?
+
     def _runner() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -44,10 +52,51 @@ def start_in_background() -> None:
         intents.members = True  # needed for GUILD_MEMBER_UPDATE / on_member_update
 
         client = discord.Client(intents=intents)
+        tree = app_commands.CommandTree(client)
+
+        @tree.command(guild=guild, name="opinion", description="Post an opinion to the current channel.")
+        @app_commands.describe(emoji="Emoji or short marker", message="Your opinion text")
+        async def opinion(interaction: discord.Interaction, emoji: str, message: str) -> None:
+            if interaction.channel is None:
+                await interaction.response.send_message("This command must be used in a channel.", ephemeral=True)
+                return
+
+            # Acknowledge quickly (Discord requires responding within a few seconds).
+            await interaction.response.send_message("Posted.", ephemeral=True)
+
+            opinion_text = f"{emoji} {message}\n— {interaction.user.mention}"
+
+            try:
+                # Post into the channel where the command was issued.
+                await interaction.channel.send(opinion_text)
+                logger.info(
+                    "discord_bot.opinion_posted",
+                    guild_id=getattr(interaction.guild, "id", None),
+                    channel_id=getattr(interaction.channel, "id", None),
+                    author_id=interaction.user.id,
+                )
+            except Exception:
+                logger.exception(
+                    "discord_bot.opinion_post_failed",
+                    guild_id=getattr(interaction.guild, "id", None),
+                    channel_id=getattr(interaction.channel, "id", None),
+                    author_id=interaction.user.id,
+                )
 
         @client.event
         async def on_ready() -> None:
             logger.info("discord_bot.ready", user=str(client.user))
+
+            try:
+                synced = await tree.sync(guild=guild)
+                logger.info(
+                        "discord_bot.slash_commands_synced",
+                        guild_id=guild_id,
+                        command_count=len(synced),
+                        commands=[c.name for c in synced],
+                )
+            except Exception:
+                logger.exception("discord_bot.slash_commands_sync_failed")
 
             channel = client.get_channel(GENERAL_CHANNEL_ID)
             if channel is None:
