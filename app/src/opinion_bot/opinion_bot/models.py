@@ -1,1 +1,1 @@
-from django.db import models  # noqa
+from django.db import models  # noqa # TODO(noqa): remove when model added
