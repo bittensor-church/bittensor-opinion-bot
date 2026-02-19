@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class OpinionCommandEvent:
     emoji: str
-    message: str | None
+    message: str
 
 @dataclass(frozen=True, slots=True)
 class OpinionUpvoteEvent:
@@ -17,6 +17,4 @@ class OpinionMessage:
     channel_id: int
     user_id: int
     emoji: str
-    message: str | None
-    featured: bool
-    upvote_count: int
+    message: str

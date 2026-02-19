@@ -7,8 +7,12 @@ import structlog
 
 from .discord_bot_const import UPVOTE_BUTTON_ID
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
+from .domain import OpinionMessage
+from .opinion_upvote_view import OpinionUpvoteView
 
 logger = structlog.get_logger(__name__)
+
+_POSTED_OPINION_TEXT = "posted opinion"
 
 # TODO: move to separate file
 class OpinionConfirmView(discord.ui.View):
@@ -48,13 +52,10 @@ class OpinionConfirmView(discord.ui.View):
             # Any other error: log warning but don't crash, we will delete/cleanup soon anyway
             logger.warning("discord_interaction.cancel_edit_failed")
 
+# FIXME: exception handling in each method, consider using a decorator, some methods may require handling discord.NotFound separately
 @dataclass(slots=True)
 class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
     _interaction: discord.Interaction
-
-    @property
-    def interaction_token(self) -> str:
-        return self._interaction.token
 
     @property
     def channel_id(self) -> int | None:
@@ -65,6 +66,10 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
     def user_id(self) -> int:
         return self._interaction.user.id
 
+    @property
+    def user_role_ids(self) -> set[int]:
+        return set([role.id for role in self._interaction.user.roles])
+
     async def defer_ephemeral(self) -> None:
         await self._interaction.response.defer(ephemeral=True)
 
@@ -74,12 +79,16 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         else:
             await self._interaction.response.send_message(content, ephemeral=True)
 
+    async def delete_response(self) -> None:
+        if self._interaction.response.is_done():
+            await self._interaction.delete_original_response()
+
     async def followup_ephemeral(self, content: str) -> None:
         await self._interaction.followup.send(content, ephemeral=True)
 
-
-    async def show_confirmation_message(self, *, content: str) -> bool: # FIXME: why bad signature?
-        view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0) # TODO: move timeout to const
+    async def show_confirmation_dialog(self, *, content: str) -> bool: # FIXME: why bad signature? is it because of '*'?
+        # FIXME: test timeout, move timeout to const
+        view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0)
         try:
             if self._interaction.response.is_done():
                     await self._interaction.edit_original_response(content=content, view=view)
@@ -94,6 +103,23 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         # TODO: handle timeout by showing some ephemeral message
 
         return view.confirmed == True
+
+    async def publish_opinion(self, *, opinion_message: OpinionMessage) -> None:  # FIXME: bad signature
+        user_mention = f"<@{opinion_message.user_id}>"
+        opinion_ref = f"#{format(opinion_message.opinion_id, 'x')}" # TODO: create hash ???
+        message_header = f"{user_mention} {_POSTED_OPINION_TEXT} {opinion_ref}"
+        message_content = f"{opinion_message.emoji} {opinion_message.message}"
+
+        await self._interaction.channel.send(
+            content=message_header,
+            embed=discord.Embed(
+                color=discord.Color.gold(),
+                description=message_content
+            ),
+            view=OpinionUpvoteView()
+        )
+        # FIXME: exception handling
+
 
 def create_discord_interaction_sdk_adapter(interaction: discord.Interaction) -> DiscordInteractionSdkAPI:
     return DiscordInteractionSdkAdapter(interaction)

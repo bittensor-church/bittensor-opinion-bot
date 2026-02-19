@@ -5,44 +5,24 @@ import asyncio
 import os
 import sys
 import threading
-from typing import Callable, Awaitable
 
+# FIXME remove httpx from deps
 import discord
-import httpx
 import structlog
 from discord import app_commands
 
-from .discord_bot_const import UPVOTE_BUTTON_ID
-from .discord_bot_rest_api import DiscordBotRestAsyncAPI
 from .discord_bot_settings import DiscordBotSettings, load_settings_from_env
-from .discord_interaction_rest_api import DiscordInteractionRestAsyncAPI
 from .discord_interaction_sdk_adapter import create_discord_interaction_sdk_adapter
 from .domain import OpinionCommandEvent, OpinionUpvoteEvent
 from .opinion import handle_opinion_command_event
+from .opinion_upvote_view import OpinionUpvoteView
 from .upvote import handle_opinion_upvote_event
 
 logger = structlog.get_logger(__name__)
 
 _thread: threading.Thread | None = None
 
-class OpinionUpvoteView(discord.ui.View):
-    """
-    Persistent view that handles button clicks for messages created via REST,
-    as long as the message has a component button with custom_id == UPVOTE_BUTTON_ID.
-    """
-
-    def __init__(self, *, upvote_handler: Callable[[discord.Interaction], Awaitable[None]]) -> None:
-        super().__init__(timeout=None) # FIXME: dlaczego None?
-        self._upvote_handler = upvote_handler
-
-    # FIXME: czy label i style mają znaczenie
-    @discord.ui.button(
-        label="Upvote",
-        style=discord.ButtonStyle.primary,
-        custom_id=UPVOTE_BUTTON_ID,
-    )
-    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._upvote_handler(interaction)
+# FIXME: move to sdk adapter
 
 class OpinionBotClient(discord.Client):
     def __init__(
@@ -50,13 +30,9 @@ class OpinionBotClient(discord.Client):
         *,
         intents: discord.Intents,
         settings: DiscordBotSettings,
-        discord_interaction_rest_client: DiscordInteractionRestAsyncAPI,
-        discord_bot_rest_client: DiscordBotRestAsyncAPI,
     ) -> None:
         super().__init__(intents=intents)
         self._settings = settings
-        self._discord_interaction_rest_client = discord_interaction_rest_client
-        self._discord_bot_rest_client = discord_bot_rest_client
         self.tree = app_commands.CommandTree(self)
 
         self._register_commands()
@@ -64,32 +40,14 @@ class OpinionBotClient(discord.Client):
     def _register_commands(self) -> None:
         guild = discord.Object(id=self._settings.guild_id)
 
-        # TODO: confirm available emojis and their labels
         @self.tree.command(guild=guild, name="opinion", description="Post an opinion to the current channel.")
         @app_commands.describe(emoji="Emoji", message="Your opinion text")
-        @app_commands.choices(
-            emoji=[
-                app_commands.Choice(name="👍 Agree", value="👍"),
-                app_commands.Choice(name="👎 Disagree", value="👎"),
-                app_commands.Choice(name="🤔 Unsure", value="🤔"),
-            ]
-        )
         async def opinion_command(
                 interaction: discord.Interaction,
-                emoji: app_commands.Choice[str],
-                message: app_commands.Range[str, 0, 240] | None = None
+                emoji: str,
+                message: app_commands.Range[str, 1, 2000]
         ) -> None:
-            await self.opinion(interaction, emoji.value, message)
-
-        # FIXME: now arg validation version
-        # @self.tree.command(guild=guild, name="opinion", description="Post an opinion to the current channel.")
-        # @app_commands.describe(emoji="Emoji", message="Your opinion text")
-        # async def opinion_command(
-        #         interaction: discord.Interaction,
-        #         emoji: str,
-        #         message: str | None = None,
-        # ) -> None:
-        #     await self.opinion(interaction, emoji, message)
+            await self.opinion(interaction, emoji, message)
 
     async def opinion(self, interaction: discord.Interaction, emoji: str, message: str) -> None:
         if interaction.channel is None:
@@ -103,8 +61,6 @@ class OpinionBotClient(discord.Client):
         await handle_opinion_command_event(
             event=event,
             discord_interaction_sdk_adapter=adapter,
-            discord_interaction_rest_client=self._discord_interaction_rest_client,
-            discord_bot_rest_client=self._discord_bot_rest_client,
         )
 
     async def upvote(self, interaction: discord.Interaction) -> None:
@@ -113,7 +69,6 @@ class OpinionBotClient(discord.Client):
         await handle_opinion_upvote_event(
             upvote_event=upvote_event,
             discord_interaction_sdk_adapter=adapter,
-            discord_bot_rest_client=self._discord_bot_rest_client,
         )
 
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -133,7 +88,7 @@ class OpinionBotClient(discord.Client):
             )
 
     async def setup_hook(self) -> None:
-        # Register persistent view for REST-created message components.
+        # Register persistent view for handling upvotes.
         self.add_view(OpinionUpvoteView(upvote_handler=self.upvote))
 
         # Sync app commands.
@@ -151,8 +106,6 @@ class OpinionBotClient(discord.Client):
 
 def start_in_background(
         discord_bot_settings: DiscordBotSettings | None = None,
-        discord_interaction_rest_client: DiscordBotRestAsyncAPI | None = None,
-        discord_bot_rest_client: DiscordBotRestAsyncAPI | None = None,
 ) -> None:
     """
     Start the Discord gateway client in a background thread.
@@ -165,22 +118,7 @@ def start_in_background(
 
     discord_bot_settings = discord_bot_settings or load_settings_from_env()
 
-    if discord_interaction_rest_client is None or discord_bot_rest_client is None:
-        from .discord_interaction_rest_async_client import create_discord_interaction_rest_async_client # noqa: WPS433 (intentional local import)
-        from .discord_bot_rest_async_client import create_discord_bot_rest_async_client # noqa: WPS433 (intentional local import)
-
-        http_client = httpx.AsyncClient(timeout=10.0) # TODO: verity timeout
-
-        discord_interaction_rest_client = discord_interaction_rest_client or create_discord_interaction_rest_async_client(
-            discord_bot_settings=discord_bot_settings,
-            client=http_client,
-        )
-
-        discord_bot_rest_client = discord_bot_rest_client or create_discord_bot_rest_async_client(
-            settings=discord_bot_settings,
-            client=http_client,
-        )
-
+    # FIXME: move boot outside django app
     def _runner() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -189,12 +127,7 @@ def start_in_background(
         intents.guilds = True
         intents.members = True  # needed for GUILD_MEMBER_UPDATE / on_member_update
 
-        bot_client = OpinionBotClient(
-            intents=intents,
-            settings=discord_bot_settings,
-            discord_interaction_rest_client=discord_interaction_rest_client,
-            discord_bot_rest_client=discord_bot_rest_client,
-        )
+        bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
 
         try:
             # Prevent discord.py from installing its own logging handlers; we use structlog.
