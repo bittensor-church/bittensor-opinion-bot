@@ -1,10 +1,4 @@
-# app/src/opinion_bot/opinion_bot/discord_bot/discord_bot_service.py
 from __future__ import annotations
-
-import asyncio
-import os
-import sys
-import threading
 
 # FIXME remove httpx from deps
 import discord
@@ -19,10 +13,6 @@ from .opinion_upvote_view import OpinionUpvoteView
 from .upvote import handle_opinion_upvote_event
 
 logger = structlog.get_logger(__name__)
-
-_thread: threading.Thread | None = None
-
-# FIXME: move to sdk adapter
 
 class OpinionBotClient(discord.Client):
     def __init__(
@@ -56,7 +46,12 @@ class OpinionBotClient(discord.Client):
             return
 
         adapter = create_discord_interaction_sdk_adapter(interaction)
-        event = OpinionCommandEvent(emoji=emoji, message=message)
+        event = OpinionCommandEvent(
+            channel_id=interaction.channel.id,
+            user=adapter.user,
+            emoji=emoji.strip(),
+            message=message,
+        )
 
         await handle_opinion_command_event(
             event=event,
@@ -64,10 +59,15 @@ class OpinionBotClient(discord.Client):
         )
 
     async def upvote(self, interaction: discord.Interaction) -> None:
+        logger.info("discord_bot.upvote_received", message_id=interaction.message.id)
         adapter = create_discord_interaction_sdk_adapter(interaction)
-        upvote_event = OpinionUpvoteEvent(message_id=interaction.message.id, channel_id=interaction.channel.id)
+        upvote_event = OpinionUpvoteEvent(
+            channel_id=interaction.channel.id,
+            message_id=interaction.message.id,
+            user=adapter.user,
+        )
         await handle_opinion_upvote_event(
-            upvote_event=upvote_event,
+            event=upvote_event,
             discord_interaction_sdk_adapter=adapter,
         )
 
@@ -103,38 +103,37 @@ class OpinionBotClient(discord.Client):
         except Exception:
             logger.exception("discord_bot.slash_commands_sync_failed")
 
+    # the following methods only for logging purposes
+    async def on_ready(self) -> None:
+        logger.info(
+            "discord_bot.ready",
+            user=str(self.user),
+            guild_id=self._settings.guild_id,
+        )
 
-def start_in_background(
+    async def on_disconnect(self) -> None:
+        logger.warning("discord_bot.disconnected")
+
+    async def on_resumed(self) -> None:
+        logger.info("discord_bot.resumed")
+
+    async def on_error(self, event_method: str, /, *args, **kwargs) -> None:
+        logger.exception("discord_bot.unhandled_event_error", event_method=event_method)
+
+
+def run_bot(
         discord_bot_settings: DiscordBotSettings | None = None,
 ) -> None:
-    """
-    Start the Discord gateway client in a background thread.
-    """
-    global _thread
-
-    if _thread is not None and _thread.is_alive():
-        logger.info("discord_bot.already_running")
-        return
-
     discord_bot_settings = discord_bot_settings or load_settings_from_env()
 
-    # FIXME: move boot outside django app
-    def _runner() -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    intents = discord.Intents.none()
+    intents.guilds = True
+    intents.members = True  # needed for GUILD_MEMBER_UPDATE / on_member_update
 
-        intents = discord.Intents.none()
-        intents.guilds = True
-        intents.members = True  # needed for GUILD_MEMBER_UPDATE / on_member_update
+    bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
 
-        bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
-
-        try:
-            # Prevent discord.py from installing its own logging handlers; we use structlog.
-            bot_client.run(discord_bot_settings.token, log_handler=None)
-        except Exception:
-            logger.exception("discord_bot.run_crashed")
-
-    _thread = threading.Thread(target=_runner, name="discord-bot-thread", daemon=True)
-    _thread.start()
-    logger.info("discord_bot.started_in_background", pid=os.getpid(), argv=sys.argv)
+    try:
+        # Prevent discord.py from installing its own logging handlers; we use structlog.
+        bot_client.run(discord_bot_settings.token, log_handler=None)
+    except Exception:
+        logger.exception("discord_bot.run_crashed")

@@ -272,7 +272,7 @@ REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
-    "IMPORTANT_ROLE_IDS": ("", "Comma-separated list of important role IDs", str),
+    # "PARAMETER": (default-value, "Help text", type),
 }
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="")

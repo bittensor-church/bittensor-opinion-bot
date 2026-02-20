@@ -2,7 +2,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class InteractionUser:
+    user_id: int
+    username: str
+    display_name: str
+    roles_ids: list[int]
+
+@dataclass(frozen=True, slots=True)
 class OpinionCommandEvent:
+    channel_id: int
+    user: InteractionUser
     emoji: str
     message: str
 
@@ -10,11 +19,9 @@ class OpinionCommandEvent:
 class OpinionUpvoteEvent:
     channel_id: int
     message_id: int
+    user: InteractionUser
 
 @dataclass(frozen=True, slots=True)
 class OpinionMessage:
-    opinion_id: int
-    channel_id: int
-    user_id: int
-    emoji: str
-    message: str
+    header: str
+    content: str

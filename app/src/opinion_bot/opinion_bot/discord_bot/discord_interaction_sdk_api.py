@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from opinion_bot.opinion_bot.discord_bot.domain import OpinionMessage
+from opinion_bot.opinion_bot.discord_bot.domain import OpinionMessage, InteractionUser
 
 
 @runtime_checkable
@@ -12,16 +12,8 @@ class DiscordInteractionSdkAPI(Protocol):
     """
 
     @property
-    def channel_id(self) -> int | None:
-        """Channel where the interaction happened, if any."""
-
-    @property
-    def user_id(self) -> int:
+    def user(self) -> InteractionUser:
         """Interacting user's id."""
-
-    @property
-    def user_role_ids(self) -> set[int]:
-        """Interacting user's role ids."""
 
     async def defer_ephemeral(self) -> None:
         """Defer an ephemeral response to the interaction."""
@@ -38,5 +30,5 @@ class DiscordInteractionSdkAPI(Protocol):
     async def show_confirmation_dialog(self, *, content: str) -> bool:
         """Show a confirmation dialog message to the user, return True if confirmed."""
 
-    async def publish_opinion(self, *, opinion_message: OpinionMessage) -> None:
-        """Publish opinion to the channel."""
+    async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:
+        """Publish opinion to the channel, returns discord message id."""
