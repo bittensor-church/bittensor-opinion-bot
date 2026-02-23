@@ -26,7 +26,6 @@ def get_user_valid_upvotes_for_channel(*, user_id: int, channel_id: int) -> list
 
 
 @database_sync_to_async
-@transaction.atomic
 def save_opinion(
         *,
         event: OpinionCommandEvent,
@@ -35,18 +34,19 @@ def save_opinion(
 ) -> Opinion:
     user = _create_or_update_user(event.user)
 
-    Opinion.objects.filter(id__in=previous_opinion_ids).update(status=Opinion.Status.REPLACED)
+    with transaction.atomic():
+        Opinion.objects.filter(id__in=previous_opinion_ids).update(status=Opinion.Status.REPLACED)
 
-    opinion = Opinion.objects.create(
-        channel_id=event.channel_id,
-        author=user,
-        emoji=event.emoji,
-        content=event.message,
-        status=Opinion.Status.PENDING if is_featured else Opinion.Status.VALID,
-        visibility=Opinion.Visibility.FEATURED if is_featured else Opinion.Visibility.HIDDEN,
-    )
+        opinion = Opinion.objects.create(
+            channel_id=event.channel_id,
+            author=user,
+            emoji=event.emoji,
+            content=event.message,
+            status=Opinion.Status.PENDING if is_featured else Opinion.Status.VALID,
+            visibility=Opinion.Visibility.FEATURED if is_featured else Opinion.Visibility.HIDDEN,
+        )
 
-    return opinion
+        return opinion
 
 
 @database_sync_to_async
@@ -64,7 +64,6 @@ def get_opinion_by_message_id(message_id: int) -> Opinion | None:
     return Opinion.objects.filter(message_id=message_id).first()
 
 @database_sync_to_async
-@transaction.atomic
 def save_upvote(
         *,
         event: OpinionUpvoteEvent,
@@ -74,17 +73,19 @@ def save_upvote(
 ) -> None:
     user = _create_or_update_user(event.user)
 
-    Upvote.objects.filter(id__in=previous_upvotes_ids).update(status=Upvote.Status.REPLACED)
+    with transaction.atomic():
+        Upvote.objects.filter(id__in=previous_upvotes_ids).update(status=Upvote.Status.REPLACED)
 
-    Upvote.objects.create(
-        channel_id=event.channel_id,
-        author=user,
-        opinion=opinion,
-        visibility=Upvote.Visibility.FEATURED if is_featured else Upvote.Visibility.HIDDEN,
-        status=Upvote.Status.VALID,
-    )
+        Upvote.objects.create(
+            channel_id=event.channel_id,
+            author=user,
+            opinion=opinion,
+            visibility=Upvote.Visibility.FEATURED if is_featured else Upvote.Visibility.HIDDEN,
+            status=Upvote.Status.VALID,
+        )
 
 
+@transaction.atomic
 def _create_or_update_user(interaction_user: InteractionUser) -> DiscordUser:
     user, _created = DiscordUser.objects.update_or_create(
         id=interaction_user.user_id,
@@ -95,9 +96,8 @@ def _create_or_update_user(interaction_user: InteractionUser) -> DiscordUser:
     )
 
     # Only keep roles that exist in DiscordRole table.
-    incoming_role_ids = set(interaction_user.roles_ids)
     existing_role_ids = set(
-        DiscordRole.objects.filter(id__in=incoming_role_ids).values_list("id", flat=True)
+        DiscordRole.objects.filter(id__in=interaction_user.roles_ids).values_list("id", flat=True)
     )
 
     # Remove roles no longer present.

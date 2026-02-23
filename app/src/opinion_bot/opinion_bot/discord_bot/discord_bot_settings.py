@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from typing import Final
 
+from opinion_bot.opinion_bot.discord_bot.exceptions import BotConfigurationException
+
 _DISCORD_BOT_TOKEN_ENV_VAR: Final[str] = "DISCORD_BOT_TOKEN"
 _DISCORD_GUILD_ID_ENV_VAR: Final[str] = "DISCORD_GUILD_ID"
 _DISCORD_APPLICATION_ID_ENV_VAR: Final[str] = "DISCORD_APPLICATION_ID"
@@ -21,27 +23,27 @@ def load_settings_from_env() -> DiscordBotSettings:
     """
     token = os.environ.get(_DISCORD_BOT_TOKEN_ENV_VAR)
     if not token:
-        raise RuntimeError(f"Missing required env var: {_DISCORD_BOT_TOKEN_ENV_VAR}")
+        raise BotConfigurationException(f"Missing required env var: {_DISCORD_BOT_TOKEN_ENV_VAR}")
 
     guild_id_raw = os.environ.get(_DISCORD_GUILD_ID_ENV_VAR)
     if not guild_id_raw:
-        raise RuntimeError(f"Missing required env var: {_DISCORD_GUILD_ID_ENV_VAR}")
+        raise BotConfigurationException(f"Missing required env var: {_DISCORD_GUILD_ID_ENV_VAR}")
 
     try:
         guild_id = int(guild_id_raw)
     except ValueError as exc:
-        raise RuntimeError(
+        raise BotConfigurationException(
             f"Invalid {_DISCORD_GUILD_ID_ENV_VAR}: expected integer, got {guild_id_raw!r}"
         ) from exc
 
     application_id_raw = os.environ.get(_DISCORD_APPLICATION_ID_ENV_VAR)
     if not application_id_raw:
-        raise RuntimeError(f"Missing required env var: {_DISCORD_APPLICATION_ID_ENV_VAR}")
+        raise BotConfigurationException(f"Missing required env var: {_DISCORD_APPLICATION_ID_ENV_VAR}")
 
     try:
         application_id = int(application_id_raw)
     except ValueError as exc:
-        raise RuntimeError(
+        raise BotConfigurationException(
             f"Invalid {_DISCORD_APPLICATION_ID_ENV_VAR}: expected integer, got {application_id_raw!r}"
         ) from exc
 

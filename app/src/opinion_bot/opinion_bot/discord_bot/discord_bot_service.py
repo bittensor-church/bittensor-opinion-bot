@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-# FIXME remove httpx from deps
+import logging
+
 import discord
-import structlog
 from discord import app_commands
 
 from .discord_bot_settings import DiscordBotSettings, load_settings_from_env
@@ -12,7 +12,7 @@ from .opinion import handle_opinion_command_event
 from .opinion_upvote_view import OpinionUpvoteView
 from .upvote import handle_opinion_upvote_event
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class OpinionBotClient(discord.Client):
     def __init__(
@@ -40,52 +40,67 @@ class OpinionBotClient(discord.Client):
             await self.opinion(interaction, emoji, message)
 
     async def opinion(self, interaction: discord.Interaction, emoji: str, message: str) -> None:
-        if interaction.channel is None:
-            # TODO: how is this possible
-            await interaction.response.send_message("This command must be used in a channel.", ephemeral=True)
-            return
+        try:
+            logger.debug(
+                f"Opinion command received channel_id={interaction.channel_id}, user_id={interaction.guild_id}, {emoji} {message}"
+            )
+            adapter = create_discord_interaction_sdk_adapter(interaction)
 
-        adapter = create_discord_interaction_sdk_adapter(interaction)
-        event = OpinionCommandEvent(
-            channel_id=interaction.channel.id,
-            user=adapter.user,
-            emoji=emoji.strip(),
-            message=message,
-        )
+            if interaction.channel_id is None:
+                await adapter.respond_ephemeral("This command must be used in a channel.")
+                return
 
-        await handle_opinion_command_event(
-            event=event,
-            discord_interaction_sdk_adapter=adapter,
-        )
+            adapter = create_discord_interaction_sdk_adapter(interaction)
+
+            opinion_event = OpinionCommandEvent(
+                channel_id=interaction.channel_id,
+                user=adapter.user,
+                emoji=emoji.strip(),
+                message=message,
+            )
+
+            await handle_opinion_command_event(
+                event=opinion_event,
+                discord_interaction_sdk_adapter=adapter,
+            )
+
+            logger.info(f"Opinion command successfully processed {opinion_event}")
+        except Exception:
+            # TODO: handle 429 separately
+            logger.exception("Opinion command failed", exc_info=True)
+            await self._try_respond_generic_error(interaction, message="Posting opinion failed. Please try again.")
 
     async def upvote(self, interaction: discord.Interaction) -> None:
-        logger.info("discord_bot.upvote_received", message_id=interaction.message.id)
-        adapter = create_discord_interaction_sdk_adapter(interaction)
-        upvote_event = OpinionUpvoteEvent(
-            channel_id=interaction.channel.id,
-            message_id=interaction.message.id,
-            user=adapter.user,
-        )
-        await handle_opinion_upvote_event(
-            event=upvote_event,
-            discord_interaction_sdk_adapter=adapter,
-        )
+        try:
+            logger.debug(
+                f"Upvote received channel_id={interaction.channel_id}, message_id={interaction.message.id}, user_id={interaction.user.id}"
+            )
+            adapter = create_discord_interaction_sdk_adapter(interaction)
 
-    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
-        if before.roles != after.roles:
-            logger.info(
-                "discord_bot.member_roles_updated",
-                guild_id=getattr(after.guild, "id", None),
-                member_id=after.id,
-                before_roles=len(before.roles),
-                after_roles=len(after.roles),
+            if interaction.channel_id is None:
+                await adapter.respond_ephemeral("This interaction must be used in a channel.")
+                return
+
+            upvote_event = OpinionUpvoteEvent(
+                channel_id=interaction.channel_id,
+                message_id=interaction.message.id,
+                user=adapter.user,
             )
-        else:
-            logger.info(
-                "discord_bot.member_updated",
-                guild_id=getattr(after.guild, "id", None),
-                member_id=after.id,
+
+            await handle_opinion_upvote_event(
+                event=upvote_event,
+                discord_interaction_sdk_adapter=adapter,
             )
+
+            logger.info(f"Opinion upvoted {upvote_event}")
+        except Exception:
+            # TODO: handle 429 separately
+            logger.exception("Opinion upvote failed", exc_info=True)
+            await self._try_respond_generic_error(interaction, message="Upvoting opinion failed. Please try again.")
+
+    # TODO: handle user data changes including role changes
+    # async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+    #     pass
 
     async def setup_hook(self) -> None:
         # Register persistent view for handling upvotes.
@@ -95,45 +110,48 @@ class OpinionBotClient(discord.Client):
         guild = discord.Object(id=self._settings.guild_id)
         try:
             synced = await self.tree.sync(guild=guild)
-            logger.info(
-                "discord_bot.slash_commands_synced",
-                command_count=len(synced),
-                commands=[c.name for c in synced],
-            )
+            logger.info(f"Slash command synced: {[c.name for c in synced]}")
+        except discord.DiscordException:
+            logger.exception("Slash commands sync failed", exc_info=True)
+            raise
+
+    async def _try_respond_generic_error(self, interaction: discord.Interaction, *, message: str) -> None:
+        """
+        Best-effort: try to tell the user something went wrong without raising secondary errors.
+        Works whether we already responded/deferred or not (adapter handles that).
+        """
+        try:
+            adapter = create_discord_interaction_sdk_adapter(interaction)
+            await adapter.followup_ephemeral(message)
         except Exception:
-            logger.exception("discord_bot.slash_commands_sync_failed")
+            logger.debug("Failed to respond with error message")
 
-    # the following methods only for logging purposes
     async def on_ready(self) -> None:
-        logger.info(
-            "discord_bot.ready",
-            user=str(self.user),
-            guild_id=self._settings.guild_id,
-        )
+        logger.info(f"Discord bot ready user={self.user}, guild_id={self._settings.guild_id}")
 
+    # TODO: the following methods only for logging purposes (diagnosing interaction failures)
     async def on_disconnect(self) -> None:
-        logger.warning("discord_bot.disconnected")
+        logger.debug("Discord bot disconnected")
 
     async def on_resumed(self) -> None:
-        logger.info("discord_bot.resumed")
+        logger.debug("Discord bot resumed")
 
     async def on_error(self, event_method: str, /, *args, **kwargs) -> None:
-        logger.exception("discord_bot.unhandled_event_error", event_method=event_method)
+        logger.exception("Unhandled discord bot error", exc_info=True)
 
 
-def run_bot(
-        discord_bot_settings: DiscordBotSettings | None = None,
-) -> None:
-    discord_bot_settings = discord_bot_settings or load_settings_from_env()
-
-    intents = discord.Intents.none()
-    intents.guilds = True
-    intents.members = True  # needed for GUILD_MEMBER_UPDATE / on_member_update
-
-    bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
-
+def run_bot(discord_bot_settings: DiscordBotSettings | None = None) -> None:
     try:
-        # Prevent discord.py from installing its own logging handlers; we use structlog.
+        discord_bot_settings = discord_bot_settings or load_settings_from_env()
+
+        intents = discord.Intents.none()
+        intents.guilds = True
+        # TODO: the following line needed for GUILD_MEMBER_UPDATE / on_member_update
+        # intents.members = True
+
+        bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
+        # Prevent discord.py from installing its own logging handlers.
         bot_client.run(discord_bot_settings.token, log_handler=None)
     except Exception:
-        logger.exception("discord_bot.run_crashed")
+        logger.exception("Discord bot run crashed", exc_info=True)
+        raise

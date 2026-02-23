@@ -235,7 +235,7 @@ class Opinion(models.Model):
     # Channel
     channel = models.ForeignKey(
         DiscordChannel,
-        on_delete=models.CASCADE,
+        on_delete=models.RESTRICT,
         related_name="opinions",
     )
 
@@ -289,7 +289,7 @@ class Opinion(models.Model):
         indexes = [
             models.Index(fields=["channel", "visibility", "status", "created_at"]),
             models.Index(fields=["channel", "author", "status", "created_at"]),
-            models.Index(fields=["message_id"]), # FIXME: migration
+            models.Index(fields=["message_id"]),
         ]
 
     def __str__(self) -> str:
@@ -320,7 +320,7 @@ class Upvote(models.Model):
     # Channel
     channel = models.ForeignKey(
         DiscordChannel,
-        on_delete=models.CASCADE,
+        on_delete=models.RESTRICT,
         related_name="upvotes",
     )
 
@@ -335,7 +335,7 @@ class Upvote(models.Model):
     # Opinion
     opinion = models.ForeignKey(
         Opinion,
-        on_delete=models.CASCADE,
+        on_delete=models.RESTRICT,
         related_name="upvoted_opinions",
         help_text="Upvoted opinion",
     )
