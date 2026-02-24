@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 import discord
 
@@ -9,6 +9,7 @@ from opinion_bot.opinion_bot.discord_bot.discord_bot_const import UPVOTE_BUTTON_
 from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
 
 logger = logging.getLogger(__name__)
+
 
 class OpinionUpvoteView(discord.ui.View):
     """
@@ -36,5 +37,5 @@ class OpinionUpvoteView(discord.ui.View):
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item) -> None:
         logger.exception(
             f"Opinion upvote view error item_type={type(item).__name__}, custom_id={getattr(item, 'custom_id', None)}",
-            exc_info=True
+            exc_info=True,
         )

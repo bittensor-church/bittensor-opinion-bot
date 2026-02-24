@@ -1,15 +1,21 @@
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from opinion_bot.opinion_bot.discord_bot.domain import OpinionUpvoteEvent
 from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
-from opinion_bot.opinion_bot.discord_bot.persistence import (get_channel, get_user_valid_upvotes_for_channel,
-                                                             any_key_role, get_opinion_by_message_id, save_upvote,
-                                                             get_opinion_by_id)
+from opinion_bot.opinion_bot.discord_bot.persistence import (
+    any_key_role,
+    get_channel,
+    get_opinion_by_id,
+    get_opinion_by_message_id,
+    get_user_valid_upvotes_for_channel,
+    save_upvote,
+)
 from opinion_bot.opinion_bot.discord_bot.utils import create_user_mention
 
+
 async def handle_opinion_upvote_event(
-        *,
-        event: OpinionUpvoteEvent,
-        discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
+    *,
+    event: OpinionUpvoteEvent,
+    discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
 ) -> None:
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
@@ -43,7 +49,7 @@ async def handle_opinion_upvote_event(
         event=event,
         opinion=opinion,
         is_featured=is_featured,
-        previous_upvotes_ids=[upvote.id for upvote in previous_upvotes]
+        previous_upvotes_ids=[upvote.id for upvote in previous_upvotes],
     )
 
     confirmation_message_parts = []

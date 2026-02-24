@@ -13,4 +13,4 @@ def create_opinion_slug(opinion_id: int) -> str:
         digits.append(_OPINION_SLUG_BASE_CHARS[n % base])
         n //= base
 
-    return ''.join(reversed(digits)).zfill(4)
+    return "".join(reversed(digits)).zfill(4)

@@ -4,14 +4,13 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('opinion_bot', '0004_upvote_remove_opinion_opinion_bot_visibil_5938da_idx_and_more'),
+        ("opinion_bot", "0004_upvote_remove_opinion_opinion_bot_visibil_5938da_idx_and_more"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='opinion',
-            index=models.Index(fields=['message_id'], name='opinion_bot_message_58a0a8_idx'),
+            model_name="opinion",
+            index=models.Index(fields=["message_id"], name="opinion_bot_message_58a0a8_idx"),
         ),
     ]

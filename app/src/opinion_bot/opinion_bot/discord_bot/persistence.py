@@ -1,8 +1,8 @@
 from channels.db import database_sync_to_async
 from django.db import transaction
 
-from opinion_bot.opinion_bot.discord_bot.domain import OpinionCommandEvent, InteractionUser, OpinionUpvoteEvent
-from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole, Opinion, DiscordUser, UserRole, Upvote
+from opinion_bot.opinion_bot.discord_bot.domain import InteractionUser, OpinionCommandEvent, OpinionUpvoteEvent
+from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole, DiscordUser, Opinion, Upvote, UserRole
 
 
 @database_sync_to_async
@@ -12,25 +12,33 @@ def get_channel(channel_id: int) -> DiscordChannel | None:
 
 @database_sync_to_async
 def any_key_role(role_ids: list[int]) -> bool:
-    return role_ids and DiscordRole.objects.filter(id__in=role_ids, is_key_role=True).exists()
+    return bool(role_ids) and DiscordRole.objects.filter(id__in=role_ids, is_key_role=True).exists()
 
 
 @database_sync_to_async
 def get_user_valid_opinions_for_channel(*, user_id: int, channel_id: int) -> list[Opinion]:
-    return list(Opinion.objects.filter(channel_id=channel_id, author_id=user_id, status=Opinion.Status.VALID).order_by("-created_at"))
+    return list(
+        Opinion.objects.filter(channel_id=channel_id, author_id=user_id, status=Opinion.Status.VALID).order_by(
+            "-created_at"
+        )
+    )
 
 
 @database_sync_to_async
 def get_user_valid_upvotes_for_channel(*, user_id: int, channel_id: int) -> list[Upvote]:
-    return list(Upvote.objects.filter(channel_id=channel_id, author_id=user_id, status=Upvote.Status.VALID).order_by("-created_at"))
+    return list(
+        Upvote.objects.filter(channel_id=channel_id, author_id=user_id, status=Upvote.Status.VALID).order_by(
+            "-created_at"
+        )
+    )
 
 
 @database_sync_to_async
 def save_opinion(
-        *,
-        event: OpinionCommandEvent,
-        is_featured: bool,
-        previous_opinion_ids: list[int],
+    *,
+    event: OpinionCommandEvent,
+    is_featured: bool,
+    previous_opinion_ids: list[int],
 ) -> Opinion:
     user = _create_or_update_user(event.user)
 
@@ -55,21 +63,24 @@ def mark_opinion_valid(*, opinion: Opinion, message_id: int) -> None:
     opinion.message_id = message_id
     opinion.save(update_fields=["status", "message_id"])
 
+
 @database_sync_to_async
 def get_opinion_by_id(opinion_id: int) -> Opinion | None:
     return Opinion.objects.filter(id=opinion_id).first()
+
 
 @database_sync_to_async
 def get_opinion_by_message_id(message_id: int) -> Opinion | None:
     return Opinion.objects.filter(message_id=message_id).first()
 
+
 @database_sync_to_async
 def save_upvote(
-        *,
-        event: OpinionUpvoteEvent,
-        opinion: Opinion,
-        is_featured: bool,
-        previous_upvotes_ids: list[int],
+    *,
+    event: OpinionUpvoteEvent,
+    opinion: Opinion,
+    is_featured: bool,
+    previous_upvotes_ids: list[int],
 ) -> None:
     user = _create_or_update_user(event.user)
 
@@ -96,9 +107,7 @@ def _create_or_update_user(interaction_user: InteractionUser) -> DiscordUser:
     )
 
     # Only keep roles that exist in DiscordRole table.
-    existing_role_ids = set(
-        DiscordRole.objects.filter(id__in=interaction_user.roles_ids).values_list("id", flat=True)
-    )
+    existing_role_ids = set(DiscordRole.objects.filter(id__in=interaction_user.roles_ids).values_list("id", flat=True))
 
     # Remove roles no longer present.
     UserRole.objects.filter(user=user).exclude(role_id__in=existing_role_ids).delete()
@@ -107,10 +116,7 @@ def _create_or_update_user(interaction_user: InteractionUser) -> DiscordUser:
     already_assigned_ids = set(
         UserRole.objects.filter(user=user, role_id__in=existing_role_ids).values_list("role_id", flat=True)
     )
-    to_create = [
-        UserRole(user=user, role_id=role_id)
-        for role_id in (existing_role_ids - already_assigned_ids)
-    ]
+    to_create = [UserRole(user=user, role_id=role_id) for role_id in (existing_role_ids - already_assigned_ids)]
     UserRole.objects.bulk_create(to_create, ignore_conflicts=True)
 
     return user

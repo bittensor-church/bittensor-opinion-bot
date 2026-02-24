@@ -1,5 +1,6 @@
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Awaitable, Callable, TypeVar, ParamSpec
+from typing import ParamSpec, TypeVar
 
 import discord
 
@@ -7,11 +8,10 @@ import discord
 class BotException(Exception):
     """Base class for all bot exceptions."""
 
+
 class BotRuntimeError(BotException):
     """Raised when the bot encounters an unexpected state."""
 
-class BotConfigurationException(BotException):
-    """Raised when the bot is misconfigured."""
 
 class DiscordInteractionException(BotException):
     """Raised when discord interaction via discord sdk fails."""
@@ -25,6 +25,7 @@ def discord_exception(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[
     """
     Decorator wrapping discord.DiscordException in bot's internal DiscordInteractionException
     """
+
     @wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         # TODO: handle 429 separately

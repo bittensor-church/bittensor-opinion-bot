@@ -63,6 +63,9 @@ type_check = [
     "types-python-dateutil",
     "types-requests",
 ]
+format = [
+    "ruff"
+]
 
 [tool.ruff]
 src = ["app/src"]

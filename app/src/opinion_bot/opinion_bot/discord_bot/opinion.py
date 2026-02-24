@@ -8,15 +8,22 @@ from opinion_bot.opinion_bot.models import (
 
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from .domain import OpinionCommandEvent, OpinionMessage
-from .persistence import get_channel, any_key_role, get_user_valid_opinions_for_channel, save_opinion, mark_opinion_valid
-from .utils import create_user_mention, create_opinion_slug
+from .persistence import (
+    any_key_role,
+    get_channel,
+    get_user_valid_opinions_for_channel,
+    mark_opinion_valid,
+    save_opinion,
+)
+from .utils import create_opinion_slug, create_user_mention
 
 logger = logging.getLogger(__name__)
 
+
 async def handle_opinion_command_event(
-        *,
-        event: OpinionCommandEvent,
-        discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
+    *,
+    event: OpinionCommandEvent,
+    discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
 ) -> None:
 
     if not emoji.is_emoji(event.emoji):
@@ -35,12 +42,18 @@ async def handle_opinion_command_event(
         return
 
     if discord_channel.is_archived:
-        await discord_interaction_sdk_adapter.respond_ephemeral("This channel is archived. Posting opinions is not allowed.")
+        await discord_interaction_sdk_adapter.respond_ephemeral(
+            "This channel is archived. Posting opinions is not allowed."
+        )
         return
 
-    previous_opinions = await get_user_valid_opinions_for_channel(user_id=event.user.user_id, channel_id=event.channel_id)
+    previous_opinions = await get_user_valid_opinions_for_channel(
+        user_id=event.user.user_id, channel_id=event.channel_id
+    )
     if previous_opinions:
-        confirmed = await _confirm_replacing_opinion(adapter=discord_interaction_sdk_adapter, opinion=previous_opinions[0])
+        confirmed = await _confirm_replacing_opinion(
+            adapter=discord_interaction_sdk_adapter, opinion=previous_opinions[0]
+        )
         logger.debug(f"Replacing opinion confirmed={confirmed} for {event}")
         if confirmed:
             await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinion...")
@@ -61,9 +74,7 @@ async def handle_opinion_command_event(
 
     if is_featured:
         message_id = await _publish_opinion(
-            event=event,
-            opinion_id=opinion.id,
-            discord_interaction_sdk_adapter=discord_interaction_sdk_adapter
+            event=event, opinion_id=opinion.id, discord_interaction_sdk_adapter=discord_interaction_sdk_adapter
         )
         logger.debug(f"Opinion message posted {event}")
         await mark_opinion_valid(opinion=opinion, message_id=message_id)
@@ -82,10 +93,7 @@ async def _confirm_replacing_opinion(*, adapter: DiscordInteractionSdkAPI, opini
 
 
 async def _publish_opinion(
-        *,
-        event: OpinionCommandEvent,
-        opinion_id: int,
-        discord_interaction_sdk_adapter: DiscordInteractionSdkAPI
+    *, event: OpinionCommandEvent, opinion_id: int, discord_interaction_sdk_adapter: DiscordInteractionSdkAPI
 ) -> int:
     user_mention = create_user_mention(event.user.user_id)
     # TODO: keep slug in DB
@@ -96,5 +104,3 @@ async def _publish_opinion(
     opinion_message = OpinionMessage(header=message_header, content=message_content)
     message_id = await discord_interaction_sdk_adapter.publish_opinion(opinion_message=opinion_message)
     return message_id
-
-

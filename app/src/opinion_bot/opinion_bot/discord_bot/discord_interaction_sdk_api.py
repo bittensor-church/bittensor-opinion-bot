@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from opinion_bot.opinion_bot.discord_bot.domain import OpinionMessage, InteractionUser
+from opinion_bot.opinion_bot.discord_bot.domain import InteractionUser, OpinionMessage
 
 
 @runtime_checkable

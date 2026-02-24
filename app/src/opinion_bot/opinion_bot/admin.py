@@ -17,6 +17,7 @@ class DiscordRoleAdmin(admin.ModelAdmin):
     readonly_fields = ("updated_at",)
     list_editable = ("name", "slug", "is_key_role")
 
+
 @admin.register(DiscordChannel)
 class DiscordChannelAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "netuid", "is_archived", "updated_at")
@@ -25,4 +26,3 @@ class DiscordChannelAdmin(admin.ModelAdmin):
     ordering = ("netuid", "is_archived", "name", "id")
     readonly_fields = ("updated_at",)
     list_editable = ("name", "netuid", "is_archived")
-

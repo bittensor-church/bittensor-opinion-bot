@@ -5,10 +5,11 @@ from dataclasses import dataclass
 import discord
 
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
-from .domain import OpinionMessage, InteractionUser
+from .domain import InteractionUser, OpinionMessage
 from .exceptions import discord_exception
 from .opinion_confirm_view import OpinionConfirmView
 from .opinion_upvote_view import OpinionUpvoteView
+
 
 @dataclass(slots=True)
 class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
@@ -22,7 +23,7 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             user_id=self._interaction.user.id,
             username=self._interaction.user.name,
             display_name=self._interaction.user.display_name,
-            roles_ids=roles_ids
+            roles_ids=roles_ids,
         )
 
     @discord_exception
@@ -35,7 +36,7 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             try:
                 await self._interaction.edit_original_response(
                     content=content,
-                    view=None # to handle replacing a confirmation message (that uses a view) with a plain one
+                    view=None,  # to handle replacing a confirmation message (that uses a view) with a plain one
                 )
             except discord.NotFound:
                 # Message gone, user dismissed it? Nothing to do.
@@ -60,7 +61,9 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             await self._interaction.response.send_message(content, ephemeral=True)
 
     @discord_exception
-    async def show_confirmation_dialog(self, *, content: str) -> bool: # FIXME: why bad signature? is it because of '*'?
+    async def show_confirmation_dialog(
+        self, *, content: str
+    ) -> bool:  # FIXME: why bad signature? is it because of '*'?
         view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0)
         if self._interaction.response.is_done():
             try:
@@ -72,17 +75,14 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             await self._interaction.response.send_message(content, view=view, ephemeral=True)
 
         await view.wait()
-        return view.confirmed == True
+        return bool(view.confirmed)
 
     @discord_exception
     async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:  # FIXME: bad signature
         message = await self._interaction.channel.send(
             content=opinion_message.header,
-            embed=discord.Embed(
-                color=discord.Color.gold(),
-                description=opinion_message.content
-            ),
-            view=OpinionUpvoteView()
+            embed=discord.Embed(color=discord.Color.gold(), description=opinion_message.content),
+            view=OpinionUpvoteView(),
         )
         return message.id
 

@@ -4,6 +4,7 @@ import discord
 
 from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError, discord_exception
 
+
 class OpinionConfirmView(discord.ui.View):
     def __init__(self, *, author_id: int, timeout: float = 60.0) -> None:
         super().__init__(timeout=timeout)
@@ -15,15 +16,15 @@ class OpinionConfirmView(discord.ui.View):
             raise BotRuntimeError("Unexpected public confirmation dialog")
         return True
 
-    @discord_exception
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    @discord_exception
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._disable_buttons(interaction=interaction)
         self.confirmed = False
         self.stop()
 
-    @discord_exception
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.primary)
+    @discord_exception
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._disable_buttons(interaction=interaction)
         self.confirmed = True

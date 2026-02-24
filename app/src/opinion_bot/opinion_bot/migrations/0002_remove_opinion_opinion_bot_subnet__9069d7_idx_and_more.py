@@ -4,37 +4,40 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('opinion_bot', '0001_initial'),
+        ("opinion_bot", "0001_initial"),
     ]
 
     operations = [
         migrations.RemoveIndex(
-            model_name='opinion',
-            name='opinion_bot_subnet__9069d7_idx',
+            model_name="opinion",
+            name="opinion_bot_subnet__9069d7_idx",
         ),
         migrations.RenameField(
-            model_name='opinion',
-            old_name='source_message_id',
-            new_name='message_id',
+            model_name="opinion",
+            old_name="source_message_id",
+            new_name="message_id",
         ),
         migrations.RemoveField(
-            model_name='opinion',
-            name='subnet_instance',
+            model_name="opinion",
+            name="subnet_instance",
         ),
         migrations.AddField(
-            model_name='opinion',
-            name='status',
-            field=models.CharField(choices=[('pending', 'Pending'), ('posted', 'Posted')], default='pending', max_length=16),
+            model_name="opinion",
+            name="status",
+            field=models.CharField(
+                choices=[("pending", "Pending"), ("posted", "Posted")], default="pending", max_length=16
+            ),
         ),
         migrations.AlterField(
-            model_name='opinion',
-            name='visibility',
-            field=models.CharField(choices=[('featured', 'Featured'), ('hidden', 'Hidden')], db_index=True, default='hidden', max_length=16),
+            model_name="opinion",
+            name="visibility",
+            field=models.CharField(
+                choices=[("featured", "Featured"), ("hidden", "Hidden")], db_index=True, default="hidden", max_length=16
+            ),
         ),
         migrations.AddIndex(
-            model_name='opinion',
-            index=models.Index(fields=['channel', 'visibility'], name='opinion_bot_channel_f40290_idx'),
+            model_name="opinion",
+            index=models.Index(fields=["channel", "visibility"], name="opinion_bot_channel_f40290_idx"),
         ),
     ]

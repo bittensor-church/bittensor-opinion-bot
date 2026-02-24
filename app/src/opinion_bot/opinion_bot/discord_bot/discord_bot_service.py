@@ -4,8 +4,8 @@ import logging
 
 import discord
 from discord import app_commands
+from django.conf import settings
 
-from .discord_bot_settings import DiscordBotSettings, load_settings_from_env
 from .discord_interaction_sdk_adapter import create_discord_interaction_sdk_adapter
 from .domain import OpinionCommandEvent, OpinionUpvoteEvent
 from .opinion import handle_opinion_command_event
@@ -14,28 +14,25 @@ from .upvote import handle_opinion_upvote_event
 
 logger = logging.getLogger(__name__)
 
+
 class OpinionBotClient(discord.Client):
     def __init__(
         self,
         *,
         intents: discord.Intents,
-        settings: DiscordBotSettings,
     ) -> None:
         super().__init__(intents=intents)
-        self._settings = settings
         self.tree = app_commands.CommandTree(self)
 
         self._register_commands()
 
     def _register_commands(self) -> None:
-        guild = discord.Object(id=self._settings.guild_id)
+        guild = discord.Object(id=settings.DISCORD_GUILD_ID)
 
         @self.tree.command(guild=guild, name="opinion", description="Post an opinion to the current channel.")
         @app_commands.describe(emoji="Emoji", message="Your opinion text")
         async def opinion_command(
-                interaction: discord.Interaction,
-                emoji: str,
-                message: app_commands.Range[str, 1, 2000]
+            interaction: discord.Interaction, emoji: str, message: app_commands.Range[str, 1, 2000]
         ) -> None:
             await self.opinion(interaction, emoji, message)
 
@@ -64,6 +61,7 @@ class OpinionBotClient(discord.Client):
                 discord_interaction_sdk_adapter=adapter,
             )
 
+            # TODO: log outcome (accepted / rejected)
             logger.info(f"Opinion command successfully processed {opinion_event}")
         except Exception:
             # TODO: handle 429 separately
@@ -92,10 +90,13 @@ class OpinionBotClient(discord.Client):
                 discord_interaction_sdk_adapter=adapter,
             )
 
-            logger.info(f"Opinion upvoted {upvote_event}")
+            # TODO: log outcome (accepted / rejected)
+            logger.info(f"Opinion upvote successfully processed {upvote_event}")
         except Exception:
             # TODO: handle 429 separately
             logger.exception("Opinion upvote failed", exc_info=True)
+            # TODO: when error occurred while showing final confirmation message the upvote was actually saved
+            #       so this message is not adequate
             await self._try_respond_generic_error(interaction, message="Upvoting opinion failed. Please try again.")
 
     # TODO: handle user data changes including role changes
@@ -107,7 +108,7 @@ class OpinionBotClient(discord.Client):
         self.add_view(OpinionUpvoteView(upvote_handler=self.upvote))
 
         # Sync app commands.
-        guild = discord.Object(id=self._settings.guild_id)
+        guild = discord.Object(id=settings.DISCORD_GUILD_ID)
         try:
             synced = await self.tree.sync(guild=guild)
             logger.info(f"Slash command synced: {[c.name for c in synced]}")
@@ -127,7 +128,7 @@ class OpinionBotClient(discord.Client):
             logger.debug("Failed to respond with error message")
 
     async def on_ready(self) -> None:
-        logger.info(f"Discord bot ready user={self.user}, guild_id={self._settings.guild_id}")
+        logger.info("Discord bot ready")
 
     # TODO: the following methods only for logging purposes (diagnosing interaction failures)
     async def on_disconnect(self) -> None:
@@ -140,18 +141,16 @@ class OpinionBotClient(discord.Client):
         logger.exception("Unhandled discord bot error", exc_info=True)
 
 
-def run_bot(discord_bot_settings: DiscordBotSettings | None = None) -> None:
+def run_bot() -> None:
     try:
-        discord_bot_settings = discord_bot_settings or load_settings_from_env()
-
         intents = discord.Intents.none()
         intents.guilds = True
         # TODO: the following line needed for GUILD_MEMBER_UPDATE / on_member_update
         # intents.members = True
 
-        bot_client = OpinionBotClient(intents=intents, settings=discord_bot_settings)
+        bot_client = OpinionBotClient(intents=intents)
         # Prevent discord.py from installing its own logging handlers.
-        bot_client.run(discord_bot_settings.token, log_handler=None)
+        bot_client.run(settings.DISCORD_BOT_TOKEN, log_handler=None)
     except Exception:
         logger.exception("Discord bot run crashed", exc_info=True)
         raise

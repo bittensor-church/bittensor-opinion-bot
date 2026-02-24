@@ -137,6 +137,7 @@ class DiscordRole(models.Model):
         key = " [KEY]" if self.is_key_role else ""
         return f"{self.name} ({self.slug}){key}"
 
+
 class UserRole(models.Model):
     """
     Many-to-many relationship between users and roles.
