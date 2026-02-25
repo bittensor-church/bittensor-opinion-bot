@@ -33,7 +33,8 @@ class OpinionConfirmView(discord.ui.View):
     @discord_exception
     async def _disable_buttons(self, interaction: discord.Interaction) -> None:
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
         try:
             # Try to give visual feedback (grey out buttons)
             await interaction.response.edit_message(view=self)

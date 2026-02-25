@@ -1,6 +1,6 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 import discord
 
@@ -21,7 +21,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def discord_exception(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+def discord_exception(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Coroutine[Any, Any, R]]:
     """
     Decorator wrapping discord.DiscordException in bot's internal DiscordInteractionException
     """

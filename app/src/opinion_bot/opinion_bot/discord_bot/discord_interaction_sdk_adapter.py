@@ -6,7 +6,7 @@ import discord
 
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from .domain import InteractionUser, OpinionMessage
-from .exceptions import discord_exception
+from .exceptions import BotRuntimeError, discord_exception
 from .opinion_confirm_view import OpinionConfirmView
 from .opinion_upvote_view import OpinionUpvoteView
 
@@ -17,7 +17,11 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
 
     @property
     def user(self) -> InteractionUser:
-        roles_ids = [role.id for role in self._interaction.user.roles]
+        roles_ids = (
+            [role.id for role in self._interaction.user.roles]
+            if isinstance(self._interaction.user, discord.Member)
+            else []
+        )
 
         return InteractionUser(
             user_id=self._interaction.user.id,
@@ -60,10 +64,9 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         else:
             await self._interaction.response.send_message(content, ephemeral=True)
 
+    # TODO: IDE shows incompatible signature
     @discord_exception
-    async def show_confirmation_dialog(
-        self, *, content: str
-    ) -> bool:  # FIXME: why bad signature? is it because of '*'?
+    async def show_confirmation_dialog(self, *, content: str) -> bool:
         view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0)
         if self._interaction.response.is_done():
             try:
@@ -77,8 +80,11 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         await view.wait()
         return bool(view.confirmed)
 
+    # TODO: IDE shows incompatible signature
     @discord_exception
-    async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:  # FIXME: bad signature
+    async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:
+        if not isinstance(self._interaction.channel, discord.TextChannel):
+            raise BotRuntimeError("Unexpected non-text channel")
         view = OpinionUpvoteView()
         message = await self._interaction.channel.send(
             content=opinion_message.header,
