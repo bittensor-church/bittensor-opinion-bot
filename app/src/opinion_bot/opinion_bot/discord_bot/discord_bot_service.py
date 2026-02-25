@@ -8,6 +8,7 @@ from django.conf import settings
 
 from .discord_interaction_sdk_adapter import create_discord_interaction_sdk_adapter
 from .domain import OpinionCommandEvent, OpinionUpvoteEvent
+from .exceptions import BotRuntimeError
 from .opinion import handle_opinion_command_event
 from .opinion_upvote_view import OpinionUpvoteView
 from .upvote import handle_opinion_upvote_event
@@ -39,7 +40,11 @@ class OpinionBotClient(discord.Client):
     async def opinion(self, interaction: discord.Interaction, emoji: str, message: str) -> None:
         try:
             logger.debug(
-                f"Opinion command received channel_id={interaction.channel_id}, user_id={interaction.guild_id}, {emoji} {message}"
+                "Opinion command received channel_id=%s, user_id=%s, %s %s",
+                interaction.channel_id,
+                interaction.guild_id,
+                emoji,
+                message,
             )
             adapter = create_discord_interaction_sdk_adapter(interaction)
 
@@ -62,7 +67,7 @@ class OpinionBotClient(discord.Client):
             )
 
             # TODO: log outcome (accepted / rejected)
-            logger.info(f"Opinion command successfully processed {opinion_event}")
+            logger.info("Opinion command successfully processed %s", opinion_event)
         except Exception:
             # TODO: handle 429 separately
             logger.exception("Opinion command failed", exc_info=True)
@@ -71,13 +76,18 @@ class OpinionBotClient(discord.Client):
     async def upvote(self, interaction: discord.Interaction) -> None:
         try:
             logger.debug(
-                f"Upvote received channel_id={interaction.channel_id}, message_id={interaction.message.id}, user_id={interaction.user.id}"
+                "Upvote received channel_id=%s, message_id=%s, user_id=%s",
+                interaction.channel_id,
+                interaction.message.id if interaction.message is not None else None,
+                interaction.user.id,
             )
             adapter = create_discord_interaction_sdk_adapter(interaction)
 
             if interaction.channel_id is None:
-                await adapter.respond_ephemeral("This interaction must be used in a channel.")
-                return
+                raise BotRuntimeError("Unexpected upvote outside channel")
+
+            if interaction.message is None:
+                raise BotRuntimeError("Unexpected upvote without message")
 
             upvote_event = OpinionUpvoteEvent(
                 channel_id=interaction.channel_id,
@@ -91,7 +101,7 @@ class OpinionBotClient(discord.Client):
             )
 
             # TODO: log outcome (accepted / rejected)
-            logger.info(f"Opinion upvote successfully processed {upvote_event}")
+            logger.info("Opinion upvote successfully processed %s", upvote_event)
         except Exception:
             # TODO: handle 429 separately
             logger.exception("Opinion upvote failed", exc_info=True)
@@ -111,7 +121,7 @@ class OpinionBotClient(discord.Client):
         guild = discord.Object(id=settings.DISCORD_GUILD_ID)
         try:
             synced = await self.tree.sync(guild=guild)
-            logger.info(f"Slash command synced: {[c.name for c in synced]}")
+            logger.info("Slash command synced: %s", [c.name for c in synced])
         except discord.DiscordException:
             logger.exception("Slash commands sync failed", exc_info=True)
             raise

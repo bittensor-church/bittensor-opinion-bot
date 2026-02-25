@@ -36,6 +36,8 @@ class OpinionUpvoteView(discord.ui.View):
     # TODO: temporary for diagnosing interaction failures
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item) -> None:
         logger.exception(
-            f"Opinion upvote view error item_type={type(item).__name__}, custom_id={getattr(item, 'custom_id', None)}",
+            "Opinion upvote view error item_type=%s, custom_id=%s",
+            type(item).__name__,
+            getattr(item, "custom_id", None),
             exc_info=True,
         )

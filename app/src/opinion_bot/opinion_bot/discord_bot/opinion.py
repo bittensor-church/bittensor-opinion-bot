@@ -26,16 +26,6 @@ async def handle_opinion_command_event(
     discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
 ) -> None:
 
-    if not emoji.is_emoji(event.emoji):
-        await discord_interaction_sdk_adapter.respond_ephemeral(f"Invalid emoji: {event.emoji}")
-        return
-
-    if not event.message:
-        await discord_interaction_sdk_adapter.respond_ephemeral("Opinion message can't be empty.")
-        return
-
-    await discord_interaction_sdk_adapter.defer_ephemeral()
-
     discord_channel = await get_channel(channel_id=event.channel_id)
     if discord_channel is None:
         await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinions is not allowed in this channel.")
@@ -47,6 +37,16 @@ async def handle_opinion_command_event(
         )
         return
 
+    if not emoji.is_emoji(event.emoji):
+        await discord_interaction_sdk_adapter.respond_ephemeral(f"Invalid emoji: {event.emoji}")
+        return
+
+    if not event.message:
+        await discord_interaction_sdk_adapter.respond_ephemeral("Opinion message can't be empty.")
+        return
+
+    await discord_interaction_sdk_adapter.defer_ephemeral()
+
     previous_opinions = await get_user_valid_opinions_for_channel(
         user_id=event.user.user_id, channel_id=event.channel_id
     )
@@ -54,7 +54,7 @@ async def handle_opinion_command_event(
         confirmed = await _confirm_replacing_opinion(
             adapter=discord_interaction_sdk_adapter, opinion=previous_opinions[0]
         )
-        logger.debug(f"Replacing opinion confirmed={confirmed} for {event}")
+        logger.debug("Replacing opinion confirmed=%s for %s", confirmed, event)
         if confirmed:
             await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinion...")
     else:
@@ -76,7 +76,7 @@ async def handle_opinion_command_event(
         message_id = await _publish_opinion(
             event=event, opinion_id=opinion.id, discord_interaction_sdk_adapter=discord_interaction_sdk_adapter
         )
-        logger.debug(f"Opinion message posted {event}")
+        logger.debug("Opinion message posted %s", event)
         await mark_opinion_valid(opinion=opinion, message_id=message_id)
         await discord_interaction_sdk_adapter.delete_response()
     else:
@@ -96,7 +96,7 @@ async def _publish_opinion(
     *, event: OpinionCommandEvent, opinion_id: int, discord_interaction_sdk_adapter: DiscordInteractionSdkAPI
 ) -> int:
     user_mention = create_user_mention(event.user.user_id)
-    # TODO: keep slug in DB
+    # TODO: consider keeping slug in DB
     opinion_ref = f"#{create_opinion_slug(opinion_id)}"
     message_header = f"{user_mention} posted opinion {opinion_ref}"
     message_content = f"{event.emoji} {event.message}"

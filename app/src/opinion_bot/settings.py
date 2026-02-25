@@ -271,7 +271,7 @@ REDIS_PORT = env.int("REDIS_PORT")
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
-CONSTANCE_CONFIG = {
+CONSTANCE_CONFIG = {  # type: ignore
     # "PARAMETER": (default-value, "Help text", type),
 }
 
