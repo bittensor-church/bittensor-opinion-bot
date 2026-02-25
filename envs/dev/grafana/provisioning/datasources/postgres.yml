@@ -4,10 +4,10 @@ datasources:
   - name: PostgreSQL
     type: postgres
     url: db:5432
-    database: ${POSTGRES_DB}
-    user: ${POSTGRES_USER}
+    database: "opinion_bot"
+    user: "postgres"
     secureJsonData:
-      password: ${POSTGRES_PASSWORD}
+      password: "12345"
     jsonData:
       sslmode: 'disable'
       postgresVersion: 1400
