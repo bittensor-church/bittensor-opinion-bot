@@ -26,6 +26,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./db/data:/var/lib/postgresql/data
+      - ../common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
     logging:
       <<: *logging
 
@@ -85,6 +86,22 @@ services:
     logging:
       <<: *logging
 
+  discord-bot:
+    image: opinion_bot/app
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/discord-bot
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    command: python manage.py runbot
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+
   celery-worker:
     image: opinion_bot/app
     init: true
@@ -101,6 +118,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - db
     logging:
       <<: *logging
 
@@ -163,6 +181,7 @@ services:
       - app
       - cadvisor
       - node-exporter
+      - backups
     command: nginx -g 'daemon off;'
     ports:
       - 80:80
@@ -218,6 +237,26 @@ services:
       - nodeexporter_collectors:/app/metrics
     logging:
       <<: *logging
+
+  grafana:
+    image: grafana/grafana-oss:11.5.1
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file: ./.env
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=${POSTGRES_HOST}:${POSTGRES_PORT}
+      - GF_DATABASE_NAME=grafana
+      - GF_DATABASE_USER=${POSTGRES_USER}
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - GF_DATABASE_SSL_MODE=disable
+    volumes:
+      - ./envs/prod/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
+    logging:
+      <<: *logging
+
   watchtower:
     image: containrrr/watchtower
     restart: unless-stopped

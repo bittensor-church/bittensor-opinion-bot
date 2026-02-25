@@ -4,6 +4,8 @@ Bittensor Opinion Bot
 
 - - -
 
+[//]: # (TODO: include bot-specific instructions and information)
+
 # Base requirements
 
 - docker with [compose plugin](https://docs.docker.com/compose/install/linux/)

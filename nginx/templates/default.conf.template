@@ -19,8 +19,8 @@ server {
 
 server {
     listen 80;
-    server_name ${NGINX_HOST};
-    return 301 https://${NGINX_HOST}$request_uri;
+    server_name ${NGINX_HOST} grafana.${NGINX_HOST};
+    return 301 https://$host$request_uri;
 }
 
 server {
@@ -85,6 +85,33 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass http://gunicorn;
+    }
+}
+
+server {
+    listen                    443 ssl http2;
+    server_name               grafana.${NGINX_HOST};
+
+    add_header                Strict-Transport-Security "max-age=31536000" always;
+    add_header                X-Content-Type-Options nosniff;
+    add_header                X-XSS-Protection "1; mode=block";
+    add_header                X-Frame-Options DENY;
+
+    ssl_dhparam               /etc/letsencrypt/dhparams/dhparam.pem;
+
+    ssl_certificate           /etc/letsencrypt/live/${NGINX_HOST}/fullchain.pem;
+    ssl_certificate_key       /etc/letsencrypt/live/${NGINX_HOST}/privkey.pem;
+    ssl_trusted_certificate   /etc/letsencrypt/live/${NGINX_HOST}/chain.pem;
+
+    access_log                /dev/stdout;
+    error_log                 /dev/stderr info;
+
+    location / {
+        proxy_pass http://grafana:3000;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 

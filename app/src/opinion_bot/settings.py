@@ -370,6 +370,9 @@ LOGGING = {
     },
 }
 
+DISCORD_BOT_TOKEN = env.str("DISCORD_BOT_TOKEN")
+DISCORD_GUILD_ID = env.int("DISCORD_GUILD_ID")
+
 
 def configure_structlog():
     structlog.configure(
