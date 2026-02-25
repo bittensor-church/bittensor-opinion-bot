@@ -7,7 +7,7 @@ services:
     healthcheck:
       test: valkey-cli ping
     volumes:
-      - ./redis/data:/data
+      - redis:/data
     ports:
       - ${REDIS_PORT}:6379
 
@@ -20,8 +20,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./db/data:/var/lib/postgresql/data
-      - .envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
+      - db:/var/lib/postgresql/data
+      - ./envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
     ports:
       - ${POSTGRES_PORT}:5432
 
@@ -35,8 +35,12 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./grafana/data:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./envs/dev/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
     ports:
       - 3000:3000
+
+volumes:
+  db:
+  redis:
+
 
