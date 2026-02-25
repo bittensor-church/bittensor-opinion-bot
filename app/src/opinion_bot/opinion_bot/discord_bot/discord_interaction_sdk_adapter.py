@@ -79,11 +79,13 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
 
     @discord_exception
     async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:  # FIXME: bad signature
+        view = OpinionUpvoteView()
         message = await self._interaction.channel.send(
             content=opinion_message.header,
             embed=discord.Embed(color=discord.Color.gold(), description=opinion_message.content),
-            view=OpinionUpvoteView(),
+            view=view,
         )
+        view.stop()
         return message.id
 
 
