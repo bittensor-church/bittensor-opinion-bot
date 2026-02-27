@@ -15,7 +15,7 @@ from .persistence import (
     mark_opinion_valid,
     save_opinion,
 )
-from .utils import create_opinion_slug, create_user_mention
+from .utils import create_masked_opinion_url, create_user_mention
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +96,8 @@ async def _publish_opinion(
     *, event: OpinionCommandEvent, opinion_id: int, discord_interaction_sdk_adapter: DiscordInteractionSdkAPI
 ) -> int:
     user_mention = create_user_mention(event.user.user_id)
-    # TODO: consider keeping slug in DB
-    opinion_ref = f"#{create_opinion_slug(opinion_id)}"
-    message_header = f"{user_mention} posted opinion {opinion_ref}"
+    opinion_url = create_masked_opinion_url(opinion_id)
+    message_header = f"{user_mention} posted opinion {opinion_url}"
     message_content = f"{event.emoji} {event.message}"
 
     opinion_message = OpinionMessage(header=message_header, content=message_content)

@@ -1,3 +1,5 @@
+from django.conf import settings
+
 _OPINION_SLUG_BASE_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
@@ -5,12 +7,6 @@ def create_user_mention(user_id: int) -> str:
     return f"<@{user_id}>"
 
 
-def create_opinion_slug(opinion_id: int) -> str:
-    digits = []
-    n = opinion_id
-    base = len(_OPINION_SLUG_BASE_CHARS)
-    while n:
-        digits.append(_OPINION_SLUG_BASE_CHARS[n % base])
-        n //= base
-
-    return "".join(reversed(digits)).zfill(4)
+def create_masked_opinion_url(opinion_id: int) -> str:
+    slug = f"#{opinion_id:05d}"
+    return f"[{slug}](<{settings.OPINION_DETAILS_URL}{opinion_id}>)"
