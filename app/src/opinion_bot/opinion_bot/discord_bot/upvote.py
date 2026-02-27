@@ -1,15 +1,13 @@
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from opinion_bot.opinion_bot.discord_bot.domain import OpinionUpvoteEvent
-from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
 from opinion_bot.opinion_bot.discord_bot.persistence import (
     any_key_role,
     get_channel,
-    get_opinion_by_id,
     get_opinion_by_message_id,
     get_user_valid_upvotes_for_channel,
     save_upvote,
 )
-from opinion_bot.opinion_bot.discord_bot.utils import create_user_mention
+from opinion_bot.opinion_bot.discord_bot.utils import create_masked_opinion_url
 
 
 async def handle_opinion_upvote_event(
@@ -52,20 +50,11 @@ async def handle_opinion_upvote_event(
         previous_upvotes_ids=[upvote.id for upvote in previous_upvotes],
     )
 
-    confirmation_message_parts = []
-    opinion_author_mention = create_user_mention(opinion.author_id)
+    opinion_url = create_masked_opinion_url(opinion.id)
     if previous_upvotes:
-        # TODO: cannot use previous_upvotes[0].opinion directly due to sync/async issues
-        previous_opinion = await get_opinion_by_id(previous_upvotes[0].opinion_id)
-        if previous_opinion is None:
-            raise BotRuntimeError("Previous opinion not found")
-        prev_opinion_author_mention = create_user_mention(previous_opinion.author_id)
-        confirmation_message_parts.append(f"Your previous upvote for opinion by {prev_opinion_author_mention}")
-        confirmation_message_parts.append(f"{previous_opinion.emoji} {previous_opinion.content}")
-        confirmation_message_parts.append(f"moved to opinion by {opinion_author_mention}")
+        previous_opinion_url = create_masked_opinion_url(previous_upvotes[0].opinion_id)
+        confirmation_message = f"Upvote moved from {previous_opinion_url} to {opinion_url}"
     else:
-        confirmation_message_parts.append(f"Upvoted opinion by {opinion_author_mention}")
+        confirmation_message = f"Opinion {opinion_url} upvoted"
 
-    confirmation_message_parts.append(f"{opinion.emoji} {opinion.content}")
-
-    await discord_interaction_sdk_adapter.followup_ephemeral("\n".join(confirmation_message_parts))
+    await discord_interaction_sdk_adapter.followup_ephemeral(confirmation_message)
