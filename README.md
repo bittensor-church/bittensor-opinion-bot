@@ -6,6 +6,63 @@ Bittensor Opinion Bot
 
 [//]: # (TODO: include bot-specific instructions and information)
 
+## Overview
+
+This project runs a Discord “opinion bot” backed by a Django app. The bot listens to activity in a configured Discord 
+guild, stores structured events and metadata in PostgreSQL, and exposes operational/metrics data for visualization in 
+Grafana. Grafana reads directly from the database; there is no custom API layer for dashboards.
+
+It's primary responsibility is to allow:
+
+1. In white listed discord channels
+2. By users of white listed discord roles 
+
+To post **opinions** and **upvote** them. The rules are:
+
+1. a single opinion per channel per users (new opinion invalidates the old one)
+2. a single upvote per channel per user (new upvote invalidates the old one)
+
+This data is then accessible for easy in a public grafana instance. The value provided by it is: critical opinions
+posted by important people of the ecosystem (denoted by discord roles) about specific subnets (identified 1:1 by discord
+channels) are easy to view and can be upvoted by other important people.
+
+## Observability and Grafana
+- Local development: A Grafana instance is included in the local stack with a PostgreSQL data source pre-provisioned. No dashboards are provisioned — create them manually in your local Grafana.
+- Staging and Production: Same approach — Grafana instances have the data source prepared, but no dashboards are provisioned. Any dashboards you create locally must be manually recreated (export/import) in these environments.
+- Production Grafana usage: The production Grafana instance is for internal, development use only.
+- Public dashboards: For public-facing dashboards we will use the main Grafana at bittensor.church, which will connect directly to the production PostgreSQL. There is no dashboard provisioning there either; create and manage dashboards manually.
+
+## Basic Discord entities and minimal setup
+
+To actually make the bot do anything, you need a few basic Discord entities configured. Minimal checklist:
+
+- Discord Application and Bot
+  - Create an application and add a Bot user in the Discord Developer Portal.
+  - Copy the bot token and put it into `DISCORD_BOT_TOKEN` (in your `.env`).
+- Guild (server)
+  - Decide which Discord server (guild) the bot will operate in.
+  - Put its numeric ID into `DISCORD_GUILD_ID` (the bot registers slash commands for this guild).
+- Invite link and permissions
+  - Invite the bot to the guild with scopes: `bot` and `applications.commands` (slash commands).
+  - Grant at minimum these permissions in the channels where you’ll use it:
+    - View Channels (Read Messages / View Channel)
+    - Send Messages
+    - Read Message History
+    - Add Reactions
+    - Use Slash Commands (Application Commands)
+  - No privileged intents are required (Message Content not needed). The bot uses guild-level interactions.
+- Channels
+  - At least one text channel where members can run `/opinion` and the bot can read/send messages. No special channel names are required.
+
+Quick test: in the target channel, run `/opinion` with an emoji and a short message — the bot should post it with an Upvote button.
+
+## Required database entities (operator setup)
+
+To make posting work in the right places, an operator must prepare a few database records via the Django Admin UI (`/admin`):
+
+- Channel whitelist: create DiscordChannel objects from the admin panel
+- Roles: create DiscordRole objects from the admin panel
+
 # Base requirements
 
 - docker with [compose plugin](https://docs.docker.com/compose/install/linux/)
@@ -17,7 +74,16 @@ Bittensor Opinion Bot
 
 ```sh
 ./setup-dev.sh
-docker compose up -d
+```
+
+This creates `envs/dev/.env` from a template. Open that file and set at minimum:
+```
+DISCORD_BOT_TOKEN=...    # Your Discord bot token
+DISCORD_GUILD_ID=...     # Numeric guild (server) ID the bot should operate in
+```
+
+```sh
+docker compose up -d  # in addition to the usual stuff, this brings up Grafana at http://localhost:3000
 cd app/src
 uv run manage.py wait_for_database --timeout 10
 uv run manage.py migrate
