@@ -4,64 +4,101 @@ Bittensor Opinion Bot
 
 - - -
 
-[//]: # (TODO: include bot-specific instructions and information)
-
 ## Overview
 
 This project runs a Discord “opinion bot” backed by a Django app. The bot listens to activity in a configured Discord 
 guild, stores structured events and metadata in PostgreSQL, and exposes operational/metrics data for visualization in 
 Grafana. Grafana reads directly from the database; there is no custom API layer for dashboards.
 
-It's primary responsibility is to allow:
+It's primary responsibility is to allow to submit **opinions** (using `/opinion` slash command) and **upvote** them. 
 
-1. In white listed discord channels
-2. By users of white listed discord roles 
-
-To post **opinions** and **upvote** them. The rules are:
-
-1. a single opinion per channel per users (new opinion invalidates the old one)
-2. a single upvote per channel per user (new upvote invalidates the old one)
+The rules are:
+1. opinions can be submitted only in whitelisted channels that are not archived
+2. only opinions submitted by users with whitelisted roles are posted as discord messages and can be upvoted
+3. a single opinion per channel per user (new opinion invalidates the old one)
+4. single upvote per channel per user (new upvote invalidates the old one)
 
 This data is then accessible for easy in a public grafana instance. The value provided by it is: critical opinions
 posted by important people of the ecosystem (denoted by discord roles) about specific subnets (identified 1:1 by discord
 channels) are easy to view and can be upvoted by other important people.
 
 ## Observability and Grafana
-- Local development: A Grafana instance is included in the local stack with a PostgreSQL data source pre-provisioned. No dashboards are provisioned — create them manually in your local Grafana.
-- Staging and Production: Same approach — Grafana instances have the data source prepared, but no dashboards are provisioned. Any dashboards you create locally must be manually recreated (export/import) in these environments.
+- Local development: A Grafana instance is included in the local stack with a PostgreSQL data source pre-provisioned. 
+  No dashboards are provisioned — create them manually in your local Grafana.
+- Staging and Production: Same approach — Grafana instances have the data source prepared, but no dashboards are provisioned. 
+  Any dashboards you create locally must be manually recreated (export/import) in these environments.
 - Production Grafana usage: The production Grafana instance is for internal, development use only.
-- Public dashboards: For public-facing dashboards we will use the main Grafana at bittensor.church, which will connect directly to the production PostgreSQL. There is no dashboard provisioning there either; create and manage dashboards manually.
+- Public dashboards: For public-facing dashboards we will use the main Grafana at bittensor.church, which will connect 
+  directly to the production PostgreSQL. There is no dashboard provisioning there either; create and manage dashboards manually.
 
-## Basic Discord entities and minimal setup
+## Setup
 
-To actually make the bot do anything, you need a few basic Discord entities configured. Minimal checklist:
+### Create a Discord bot application
 
-- Discord Application and Bot
-  - Create an application and add a Bot user in the Discord Developer Portal.
-  - Copy the bot token and put it into `DISCORD_BOT_TOKEN` (in your `.env`).
-- Guild (server)
-  - Decide which Discord server (guild) the bot will operate in.
-  - Put its numeric ID into `DISCORD_GUILD_ID` (the bot registers slash commands for this guild).
-- Invite link and permissions
-  - Invite the bot to the guild with scopes: `bot` and `applications.commands` (slash commands).
-  - Grant at minimum these permissions in the channels where you’ll use it:
-    - View Channels (Read Messages / View Channel)
+Create a bot application in the Discord Developer Portal https://discord.com/developers:
+- use the "New Application" button, give a name that will be displayed in the bot's user profile 
+  and in bot posted opinion messages
+- in the "Installation" tab:
+  - switch off "User install"
+  - leave "Guild install" enabled
+  - set "Install Link" to None
+- in the "Bot" tab:
+  - switch off "Public Bot" (this with "Install Link" set to None prevents anyone from installing the bot in their guilds)
+  - upload a bot avatar
+  - switch on "Server Member Intent" **NOTE:** this is required for reacting on GUILD_MEMBERS events (e.g., member update) 
+    which is not implemented yet
+- in the "OAuth2" tab generate the URL for inviting the bot to a guild discord (server)
+  - switch on scopes: "bot", "applications.commands"
+  - no need to set any permissions as long as the bot acts only within discord interactions (responds to slash commands 
+    and custom buttons)
+  - if the bot needs to post messages in a channel from a background task, it has to be given the following permissions:
+    - View Channels
     - Send Messages
-    - Read Message History
-    - Add Reactions
-    - Use Slash Commands (Application Commands)
-  - No privileged intents are required (Message Content not needed). The bot uses guild-level interactions.
-- Channels
-  - At least one text channel where members can run `/opinion` and the bot can read/send messages. No special channel names are required.
+    - Embed Links
+  - the bot's permissions can be managed later in the Disord Server Settings / Roles / <bot name> Role / Permissions
 
-Quick test: in the target channel, run `/opinion` with an emoji and a short message — the bot should post it with an Upvote button.
+### Configure the bot application (`.env` setup)
 
-## Required database entities (operator setup)
+  - use "Reset Token" button on the "Bot" tab in the bot application settings to generate a new token 
+    and put it into `DISCORD_BOT_TOKEN`
+  - put the guild's numeric ID into `DISCORD_GUILD_ID` (the bot registers slash commands for this guild).
+    - guild ID can be found in the URL of the guild's channel in the browser `discord.com/channels/<GuildID>/<ChannelID>`
+  - set opinions url in `OPINIONS_URL` (e.g. `https://staging.opinion-bot.bactensor.io/opinions`),
+    this is used to create links in opinion messages and upvote confirmation messages
+  - set grafana opinion details dashboard url in `OPINION_DETAILS_REDIRECT_URL` 
+    (e.g. `https://grafana.staging.opinion-bot.bactensor.io/d/bfeck1a2yvjswd/opinion-details`),
+    this is used to redirect from `<OPINIONS_URL>?id=<opinion_id>` to `<OPINION_DETAILS_REDIRECT_URL>?var-opinion_id=<opinion_id>`
+  - set grafana opinions dashboard url in `OPINIONS_REDIRECT_URL` (e.g. `https://grafana.staging.opinion-bot.bactensor.io/d/bfeb9t1wol79cd/opinions`), 
+    this is used to redirect from `<OPINIONS_URL>?channel_id=<channel_id>` to `<OPINIONS_REDIRECT_URL>?var-channel_id=<channel_id>`
+
+
+### Configure the bot application (operator setup)
 
 To make posting work in the right places, an operator must prepare a few database records via the Django Admin UI (`/admin`):
 
 - Channel whitelist: create DiscordChannel objects from the admin panel
+  - Channel ID can be found in the URL of the guild in the browser `discord.com/channels/<GuildID>/<ChannelID>`
 - Roles: create DiscordRole objects from the admin panel
+  - Role ID can be taken from the Discord Server Settings / Roles / 3 dots menu / Copy Role ID
+  - To activate Copy Role ID action, switch on "Developer Mode" in your Discord Account Settings / Advanced
+
+### Invite the bot to a guild discord (server)
+
+- use the URL from the "OAuth2" tab to invite the bot to a guild discord (server) – you have to be one of the following:
+  - a guild owner,
+  - a user with the "Administrator" permission,
+  - a user with the "Manage Server" permission.
+- the bot will be added to the guild as a member with the bot name role
+
+- **IMPORTANT**: restart the bot application as it synchronizes slash commands on Discord on startup
+
+### Quick test
+
+In a whitelisted channel, as a user with a whitelisted role, run `/opinion` with an emoji and a short message.
+The bot should post it with an Upvote button.
+
+Click the Upvote button. The bot should respond with `You can't upvote your own opinion.` message.
+
 
 # Base requirements
 
