@@ -96,6 +96,8 @@ class Command(BaseCommand):
 
         # 3) Create one opinion per user in the first channel
         opinions_to_create: list[Opinion] = []
+        opinion_created_at: list[tuple[Opinion, timezone.datetime]] = []
+
         for u in users:
             has_role = u.id in even_user_ids
             visibility = Opinion.Visibility.FEATURED if has_role else Opinion.Visibility.HIDDEN
@@ -111,19 +113,22 @@ class Command(BaseCommand):
             content = _make_lorem_text(target_len=target_len, rng=rng)
             created_at = _random_dt_between(month_ago, now, rng=rng)
 
-            opinions_to_create.append(
-                Opinion(
-                    channel=channel,
-                    author=u,
-                    emoji=emoji,
-                    content=content,
-                    visibility=visibility,
-                    status=Opinion.Status.VALID,
-                    created_at=created_at,
-                )
+            opinion = Opinion(
+                channel=channel,
+                author=u,
+                emoji=emoji,
+                content=content,
+                visibility=visibility,
+                status=Opinion.Status.VALID,
             )
+            opinions_to_create.append(opinion)
+            opinion_created_at.append((opinion, created_at))
 
         Opinion.objects.bulk_create(opinions_to_create, batch_size=1000)
+
+        for opinion, created_at in opinion_created_at:
+            opinion.created_at = created_at
+        Opinion.objects.bulk_update(opinions_to_create, ["created_at"], batch_size=1000)
 
         # Re-fetch opinions for these users in this channel (in case DB had previous data, or bulk_create didn't populate ids).
         created_opinions = list(

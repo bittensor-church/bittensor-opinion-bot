@@ -15,13 +15,14 @@ from .upvote import handle_opinion_upvote_event
 
 logger = logging.getLogger(__name__)
 
-
+# TODO: add "I am alive" tick metrics (like every 5 minutes)
 class OpinionBotClient(discord.Client):
     def __init__(
         self,
         *,
         intents: discord.Intents,
     ) -> None:
+        # TODO: set max_ratelimit_timeout and handle discord.RateLimited
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
