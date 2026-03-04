@@ -38,3 +38,17 @@ def metrics_view(request):
         )
 
     return ExportToDjangoView(request)
+
+"""
+Metrics for opinion-bot:
+  - opinion histogram
+    - NOTE: makes no sense when there is opinion replace confirmation, deduct confirmation time?
+  - upvote histogram
+    - NOTE: if we introduce an upvote move confirmation have to be changed
+  - discord 429 response count (per invocation)
+  
+Notes:
+  - outcome in label: success, failure, rate limit (use finally!!!)
+  - time type in label: bot, discord, discord.user-confirmation
+  - separate histogram for rate limits with higher bucket sizes
+"""

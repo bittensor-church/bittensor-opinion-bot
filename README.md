@@ -15,8 +15,8 @@ It's primary responsibility is to allow to submit **opinions** (using `/opinion`
 The rules are:
 1. opinions can be submitted only in whitelisted channels that are not archived
 2. only opinions submitted by users with whitelisted roles are posted as discord messages and can be upvoted
-3. a single opinion per channel per user (new opinion invalidates the old one)
-4. single upvote per channel per user (new upvote invalidates the old one)
+3. a single opinion per channel per user, a new opinion replaces the old one (status change, the message stays on the channel)
+4. single upvote per channel per user, a new upvote replaces the old one (status change)
 
 This data is then accessible for easy in a public grafana instance. The value provided by it is: critical opinions
 posted by important people of the ecosystem (denoted by discord roles) about specific subnets (identified 1:1 by discord
