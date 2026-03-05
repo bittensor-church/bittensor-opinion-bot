@@ -3,6 +3,7 @@ from opinion_bot.opinion_bot.discord_bot.domain import OpinionUpvoteEvent
 from opinion_bot.opinion_bot.discord_bot.persistence import (
     any_key_role,
     get_channel,
+    get_opinion_by_id,
     get_opinion_by_message_id,
     get_user_valid_upvotes_for_channel,
     save_upvote,
@@ -26,9 +27,17 @@ async def handle_opinion_upvote_event(
         await discord_interaction_sdk_adapter.followup_ephemeral("This channel is archived. Upvoting is not allowed.")
         return
 
-    opinion = await get_opinion_by_message_id(event.message_id)
+    if event.message_id:
+        opinion = await get_opinion_by_message_id(event.message_id)
+    else:
+        opinion = await get_opinion_by_id(event.opinion_id)
+
     if opinion is None:
         await discord_interaction_sdk_adapter.followup_ephemeral("Unknown opinion.")
+        return
+
+    if opinion.channel_id != event.channel_id:
+        await discord_interaction_sdk_adapter.followup_ephemeral("Opinion is not in this channel.")
         return
 
     if opinion.author_id == event.user.user_id:

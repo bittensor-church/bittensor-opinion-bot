@@ -39,6 +39,7 @@ def metrics_view(request):
 
     return ExportToDjangoView(request)
 
+
 """
 Metrics for opinion-bot:
   - opinion histogram

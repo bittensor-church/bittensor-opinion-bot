@@ -15,6 +15,7 @@ from .upvote import handle_opinion_upvote_event
 
 logger = logging.getLogger(__name__)
 
+
 # TODO: add "I am alive" tick metrics (like every 5 minutes)
 class OpinionBotClient(discord.Client):
     def __init__(
@@ -38,6 +39,13 @@ class OpinionBotClient(discord.Client):
         ) -> None:
             await self.opinion(interaction, emoji, message)
 
+        @self.tree.command(
+            guild=guild, name="opinion-upvote", description="Upvote given opinion on the current channel."
+        )
+        @app_commands.describe(opinion_id="Opinion Id")
+        async def upvote_command(interaction: discord.Interaction, opinion_id: int) -> None:
+            await self.upvote_command(interaction, opinion_id)
+
     async def opinion(self, interaction: discord.Interaction, emoji: str, message: str) -> None:
         try:
             logger.debug(
@@ -52,8 +60,6 @@ class OpinionBotClient(discord.Client):
             if interaction.channel_id is None:
                 await adapter.respond_ephemeral("This command must be used in a channel.")
                 return
-
-            adapter = create_discord_interaction_sdk_adapter(interaction)
 
             opinion_event = OpinionCommandEvent(
                 channel_id=interaction.channel_id,
@@ -74,7 +80,39 @@ class OpinionBotClient(discord.Client):
             logger.exception("Opinion command failed", exc_info=True)
             await self._try_respond_generic_error(interaction, message="Posting opinion failed. Please try again.")
 
-    async def upvote(self, interaction: discord.Interaction) -> None:
+    async def upvote_command(self, interaction: discord.Interaction, opinion_id: int) -> None:
+        try:
+            logger.debug(
+                "Upvote command received channel_id=%s, user_id=%s, opinion_id=%s",
+                interaction.channel_id,
+                interaction.guild_id,
+                opinion_id,
+            )
+            adapter = create_discord_interaction_sdk_adapter(interaction)
+
+            if interaction.channel_id is None:
+                await adapter.respond_ephemeral("This command must be used in a channel.")
+                return
+
+            upvote_event = OpinionUpvoteEvent(
+                channel_id=interaction.channel_id,
+                opinion_id=opinion_id,
+                user=adapter.user,
+            )
+
+            await handle_opinion_upvote_event(
+                event=upvote_event,
+                discord_interaction_sdk_adapter=adapter,
+            )
+
+            # TODO: log outcome (accepted / rejected)
+            logger.info("Upvote command successfully processed %s", upvote_event)
+        except Exception:
+            # TODO: handle 429 separately
+            logger.exception("Upvote command failed", exc_info=True)
+            await self._try_respond_generic_error(interaction, message="Posting opinion failed. Please try again.")
+
+    async def upvote_button_click(self, interaction: discord.Interaction) -> None:
         try:
             logger.debug(
                 "Upvote received channel_id=%s, message_id=%s, user_id=%s",
@@ -116,7 +154,7 @@ class OpinionBotClient(discord.Client):
 
     async def setup_hook(self) -> None:
         # Register persistent view for handling upvotes.
-        self.add_view(OpinionUpvoteView(upvote_handler=self.upvote))
+        self.add_view(OpinionUpvoteView(upvote_handler=self.upvote_button_click))
 
         # Sync app commands.
         guild = discord.Object(id=settings.DISCORD_GUILD_ID)
