@@ -10,11 +10,13 @@ This project runs a Discord “opinion bot” backed by a Django app. The bot li
 guild, stores structured events and metadata in PostgreSQL, and exposes operational/metrics data for visualization in 
 Grafana. Grafana reads directly from the database; there is no custom API layer for dashboards.
 
-It's primary responsibility is to allow to submit **opinions** (using `/opinion` slash command) and **upvote** them. 
+It's primary responsibility is to allow to submit **opinions** (using `/opinion` slash command) and **upvote** them by either:
+- using Upvote custom button on an opinion message,
+- or using `/opinion-upvote` slash command
 
 The rules are:
 1. opinions can be submitted only in whitelisted channels that are not archived
-2. only opinions submitted by users with whitelisted roles are posted as discord messages and can be upvoted
+2. only opinions submitted by users with whitelisted roles are posted as discord messages
 3. a single opinion per channel per user, a new opinion replaces the old one (status change, the message stays on the channel)
 4. single upvote per channel per user, a new upvote replaces the old one (status change)
 
