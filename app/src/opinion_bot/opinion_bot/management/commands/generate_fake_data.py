@@ -155,9 +155,9 @@ class Command(BaseCommand):
         DiscordUser.objects.bulk_create(users_to_create, ignore_conflicts=True, batch_size=1000)
 
         users = list(
-            DiscordUser.objects.filter(id__gte=cfg.user_id_from, id__lte=cfg.user_id_to).order_by("id").only(
-                "id", "username", "display_name"
-            )
+            DiscordUser.objects.filter(id__gte=cfg.user_id_from, id__lte=cfg.user_id_to)
+            .order_by("id")
+            .only("id", "username", "display_name")
         )
         if not users:
             raise CommandError("No users found in the requested id range after creation attempt.")
@@ -172,8 +172,12 @@ class Command(BaseCommand):
         UserRole.objects.bulk_create(user_roles_to_create, ignore_conflicts=True, batch_size=1000)
 
         # 3) Remove ONLY opinions and upvotes authored by users in given id range (do not touch other users)
-        upvotes_deleted, _ = Upvote.objects.filter(author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to).delete()
-        opinions_deleted, _ = Opinion.objects.filter(author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to).delete()
+        upvotes_deleted, _ = Upvote.objects.filter(
+            author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to
+        ).delete()
+        opinions_deleted, _ = Opinion.objects.filter(
+            author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to
+        ).delete()
 
         # 4) Create random number of opinions per user:
         #    - 1..number_of_channels
@@ -241,8 +245,9 @@ class Command(BaseCommand):
         #      but computed separately per channel.
         # Re-fetch opinions we just created for those users to get ids (and to build per-channel pools).
         created_opinions = list(
-            Opinion.objects.filter(author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to)
-            .only("id", "author_id", "channel_id")
+            Opinion.objects.filter(author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to).only(
+                "id", "author_id", "channel_id"
+            )
         )
 
         opinions_by_channel_id: dict[int, list[Opinion]] = {ch.id: [] for ch in channels}

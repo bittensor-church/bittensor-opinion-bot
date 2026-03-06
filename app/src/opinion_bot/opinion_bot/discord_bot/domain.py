@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
+
+DiscordEventOutcome = Literal["success", "user_cancelled", "rejected", "rate_limited", "error", "unhandled_error"]
 
 
 @dataclass(frozen=True, slots=True)
