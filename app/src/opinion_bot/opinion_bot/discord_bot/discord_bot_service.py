@@ -28,8 +28,7 @@ class OpinionBotClient(discord.Client):
         *,
         intents: discord.Intents,
     ) -> None:
-        # TODO: set max_ratelimit_timeout and handle discord.RateLimited
-        super().__init__(intents=intents)
+        super().__init__(intents=intents, max_ratelimit_timeout=30)
         self.tree = app_commands.CommandTree(self)
 
         self._register_commands()
@@ -81,11 +80,10 @@ class OpinionBotClient(discord.Client):
             )
             logger.info("Opinion command processed [%s] %s", outcome, opinion_event)
             measurement.set_outcome(outcome)
-        except Exception:
-            # TODO: handle 429 separately
+        except Exception as exc:
             logger.exception("Opinion command failed")
             await self._try_respond_generic_error(adapter, message="Posting opinion failed. Please try again.")
-            measurement.set_outcome("error")
+            measurement.set_outcome_from_exception(exc)
 
     @event_measurement_decorator("upvote_command")
     async def upvote_command(
@@ -116,11 +114,10 @@ class OpinionBotClient(discord.Client):
 
             logger.info("Upvote command processed [%s] %s", outcome, upvote_event)
             measurement.set_outcome(outcome)
-        except Exception:
-            # TODO: handle 429 separately
+        except Exception as exc:
             logger.exception("Upvote command failed")
             await self._try_respond_generic_error(adapter, message="Posting opinion failed. Please try again.")
-            measurement.set_outcome("error")
+            measurement.set_outcome_from_exception(exc)
 
     @event_measurement_decorator("upvote_button_click")
     async def upvote_button_click(self, measurement: DiscordEventMeasurement, interaction: discord.Interaction) -> None:
@@ -152,13 +149,12 @@ class OpinionBotClient(discord.Client):
 
             logger.info("Opinion upvote processed [%s] %s", outcome, upvote_event)
             measurement.set_outcome(outcome)
-        except Exception:
-            # TODO: handle 429 separately
+        except Exception as exc:
             logger.exception("Opinion upvote failed")
             # TODO: when error occurred while showing final confirmation message the upvote was actually saved
             #       so this message is not adequate
             await self._try_respond_generic_error(adapter, message="Upvoting opinion failed. Please try again.")
-            measurement.set_outcome("error")
+            measurement.set_outcome_from_exception(exc)
 
     # TODO: handle user data changes including role changes
     # async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
