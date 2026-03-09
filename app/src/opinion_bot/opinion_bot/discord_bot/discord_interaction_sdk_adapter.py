@@ -7,6 +7,7 @@ import discord
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from .domain import InteractionUser, OpinionMessage
 from .exceptions import BotRuntimeError, discord_exception
+from .metrics import DiscordEventMeasurement
 from .opinion_confirm_view import OpinionConfirmView
 from .opinion_upvote_view import OpinionUpvoteView
 
@@ -14,6 +15,7 @@ from .opinion_upvote_view import OpinionUpvoteView
 @dataclass(slots=True)
 class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
     _interaction: discord.Interaction
+    _event_measurement: DiscordEventMeasurement
 
     @property
     def user(self) -> InteractionUser:
@@ -32,27 +34,31 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
 
     @discord_exception
     async def defer_ephemeral(self) -> None:
-        await self._interaction.response.defer(ephemeral=True)
+        async with self._event_measurement.discord_sdk_call(sdk_call_name="response.defer_ephemeral"):
+            await self._interaction.response.defer(ephemeral=True)
 
     @discord_exception
     async def respond_ephemeral(self, content: str) -> None:
         if self._interaction.response.is_done():
             try:
-                await self._interaction.edit_original_response(
-                    content=content,
-                    view=None,  # to handle replacing a confirmation message (that uses a view) with a plain one
-                )
+                async with self._event_measurement.discord_sdk_call(sdk_call_name="edit_original_response"):
+                    await self._interaction.edit_original_response(
+                        content=content,
+                        view=None,  # to handle replacing a confirmation message (that uses a view) with a plain one
+                    )
             except discord.NotFound:
                 # Message gone, user dismissed it? Nothing to do.
                 pass
         else:
-            await self._interaction.response.send_message(content, ephemeral=True)
+            async with self._event_measurement.discord_sdk_call(sdk_call_name="response.send_ephemeral"):
+                await self._interaction.response.send_message(content, ephemeral=True)
 
     @discord_exception
     async def delete_response(self) -> None:
         try:
             if self._interaction.response.is_done():
-                await self._interaction.delete_original_response()
+                async with self._event_measurement.discord_sdk_call(sdk_call_name="delete_original_response"):
+                    await self._interaction.delete_original_response()
         except discord.NotFound:
             # Message gone, user dismissed it? Nothing to do.
             pass
@@ -60,9 +66,11 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
     @discord_exception
     async def followup_ephemeral(self, content: str) -> None:
         if self._interaction.response.is_done():
-            await self._interaction.followup.send(content, ephemeral=True)
+            async with self._event_measurement.discord_sdk_call(sdk_call_name="followup.send_ephemeral"):
+                await self._interaction.followup.send(content, ephemeral=True)
         else:
-            await self._interaction.response.send_message(content, ephemeral=True)
+            async with self._event_measurement.discord_sdk_call(sdk_call_name="response.send_ephemeral"):
+                await self._interaction.response.send_message(content, ephemeral=True)
 
     # TODO: IDE shows incompatible signature
     @discord_exception
@@ -70,14 +78,17 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0)
         if self._interaction.response.is_done():
             try:
-                await self._interaction.edit_original_response(content=content, view=view)
+                async with self._event_measurement.discord_sdk_call(sdk_call_name="edit_original_response"):
+                    await self._interaction.edit_original_response(content=content, view=view)
             except discord.NotFound:
                 # Message gone, user dismissed it? Assume they didn't want to proceed.
                 return False
         else:
-            await self._interaction.response.send_message(content, view=view, ephemeral=True)
+            async with self._event_measurement.discord_sdk_call(sdk_call_name="response.send_ephemeral"):
+                await self._interaction.response.send_message(content, view=view, ephemeral=True)
 
-        await view.wait()
+        async with self._event_measurement.discord_sdk_call(sdk_call_name="view.wait", is_confirmation_message=True):
+            await view.wait()
         return bool(view.confirmed)
 
     # TODO: IDE shows incompatible signature
@@ -86,14 +97,17 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
         if not isinstance(self._interaction.channel, discord.TextChannel):
             raise BotRuntimeError("Unexpected non-text channel")
         view = OpinionUpvoteView()
-        message = await self._interaction.channel.send(
-            content=opinion_message.header,
-            embed=discord.Embed(color=discord.Color.gold(), description=opinion_message.content),
-            view=view,
-        )
+        async with self._event_measurement.discord_sdk_call(sdk_call_name="channel.send"):
+            message = await self._interaction.channel.send(
+                content=opinion_message.header,
+                embed=discord.Embed(color=discord.Color.gold(), description=opinion_message.content),
+                view=view,
+            )
         view.stop()
         return message.id
 
 
-def create_discord_interaction_sdk_adapter(interaction: discord.Interaction) -> DiscordInteractionSdkAPI:
-    return DiscordInteractionSdkAdapter(interaction)
+def create_discord_interaction_sdk_adapter(
+    interaction: discord.Interaction, event_measurement: DiscordEventMeasurement
+) -> DiscordInteractionSdkAPI:
+    return DiscordInteractionSdkAdapter(interaction, event_measurement)

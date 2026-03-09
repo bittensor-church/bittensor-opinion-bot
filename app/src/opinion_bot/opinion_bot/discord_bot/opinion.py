@@ -7,7 +7,7 @@ from opinion_bot.opinion_bot.models import (
 )
 
 from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
-from .domain import OpinionCommandEvent, OpinionMessage
+from .domain import DiscordEventOutcome, OpinionCommandEvent, OpinionMessage
 from .persistence import (
     any_key_role,
     get_channel,
@@ -24,26 +24,26 @@ async def handle_opinion_command_event(
     *,
     event: OpinionCommandEvent,
     discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
-) -> None:
+) -> DiscordEventOutcome:
 
     discord_channel = await get_channel(channel_id=event.channel_id)
     if discord_channel is None:
         await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinions is not allowed in this channel.")
-        return
+        return "rejected"
 
     if discord_channel.is_archived:
         await discord_interaction_sdk_adapter.respond_ephemeral(
             "This channel is archived. Posting opinions is not allowed."
         )
-        return
+        return "rejected"
 
     if not emoji.is_emoji(event.emoji):
         await discord_interaction_sdk_adapter.respond_ephemeral(f"Invalid emoji: {event.emoji}")
-        return
+        return "rejected"
 
     if not event.message:
         await discord_interaction_sdk_adapter.respond_ephemeral("Opinion message can't be empty.")
-        return
+        return "rejected"
 
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
@@ -62,7 +62,7 @@ async def handle_opinion_command_event(
 
     if not confirmed:
         await discord_interaction_sdk_adapter.delete_response()
-        return
+        return "user_cancelled"
 
     is_featured = await any_key_role(event.user.roles_ids)
 
@@ -85,6 +85,7 @@ async def handle_opinion_command_event(
             "but it will not be displayed publicly to prevent flooding the subnet channels with too many opinions.\n"
             "Thank you for your understanding."
         )
+    return "success"
 
 
 async def _confirm_replacing_opinion(*, adapter: DiscordInteractionSdkAPI, opinion: Opinion) -> bool:

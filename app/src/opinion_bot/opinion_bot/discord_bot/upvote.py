@@ -1,5 +1,5 @@
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
-from opinion_bot.opinion_bot.discord_bot.domain import OpinionUpvoteEvent
+from opinion_bot.opinion_bot.discord_bot.domain import DiscordEventOutcome, OpinionUpvoteEvent
 from opinion_bot.opinion_bot.discord_bot.persistence import (
     any_key_role,
     get_channel,
@@ -15,17 +15,17 @@ async def handle_opinion_upvote_event(
     *,
     event: OpinionUpvoteEvent,
     discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
-) -> None:
+) -> DiscordEventOutcome:
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
     discord_channel = await get_channel(channel_id=event.channel_id)
     if discord_channel is None:
         await discord_interaction_sdk_adapter.followup_ephemeral("Upvoting opinions is not allowed in this channel.")
-        return
+        return "rejected"
 
     if discord_channel.is_archived:
         await discord_interaction_sdk_adapter.followup_ephemeral("This channel is archived. Upvoting is not allowed.")
-        return
+        return "rejected"
 
     if event.message_id:
         opinion = await get_opinion_by_message_id(event.message_id)
@@ -34,21 +34,21 @@ async def handle_opinion_upvote_event(
 
     if opinion is None:
         await discord_interaction_sdk_adapter.followup_ephemeral("Unknown opinion.")
-        return
+        return "rejected"
 
     if opinion.channel_id != event.channel_id:
         await discord_interaction_sdk_adapter.followup_ephemeral("Opinion is not in this channel.")
-        return
+        return "rejected"
 
     if opinion.author_id == event.user.user_id:
         await discord_interaction_sdk_adapter.followup_ephemeral("You can't upvote your own opinion.")
-        return
+        return "rejected"
 
     previous_upvotes = await get_user_valid_upvotes_for_channel(user_id=event.user.user_id, channel_id=event.channel_id)
 
     if opinion.id in [upvote.opinion_id for upvote in previous_upvotes]:
         await discord_interaction_sdk_adapter.followup_ephemeral("You have already upvoted this opinion.")
-        return
+        return "rejected"
 
     is_featured = await any_key_role(event.user.roles_ids)
 
@@ -67,3 +67,4 @@ async def handle_opinion_upvote_event(
         confirmation_message = f"Opinion {opinion_url} upvoted"
 
     await discord_interaction_sdk_adapter.followup_ephemeral(confirmation_message)
+    return "success"
