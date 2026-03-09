@@ -101,6 +101,17 @@ The bot should post it with an Upvote button.
 
 Click the Upvote button. The bot should respond with `You can't upvote your own opinion.` message.
 
+## Fake data generation
+
+Run `python app/src/manage.py generate_fake_data` to generate fake data for grafana testing:
+- **data created only in DB, not on discord**,
+- create missing channels with netuid in the given range (default 1..128)
+- create missing users with ids in the given range (default 1..1000)
+- give random user roles to created users with even ids
+- delete upvotes and opinions from users in the given range
+- for each user in the given range create opinions in randomly picked channels and upvote randomly picked opinion
+  in randomly picked channels (non-uniform distribution)
+
 
 # Base requirements
 
