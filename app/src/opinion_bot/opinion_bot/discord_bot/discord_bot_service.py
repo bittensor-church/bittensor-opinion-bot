@@ -199,8 +199,9 @@ class OpinionBotClient(discord.Client):
 
 def run_bot() -> None:
     try:
-        logger.info(f"Starting prometheus metrics server on port {settings.DISCORD_BOT_METRICS_PORT}")
-        prometheus_client.start_http_server(settings.DISCORD_BOT_METRICS_PORT, registry=registry)
+        if settings.DEBUG:
+            logger.info(f"Starting prometheus metrics server on port 9000")
+            prometheus_client.start_http_server(9000, registry=registry)
 
         intents = discord.Intents.none()
         intents.guilds = True
