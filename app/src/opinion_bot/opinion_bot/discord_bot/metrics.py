@@ -1,3 +1,4 @@
+import datetime
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -11,8 +12,6 @@ from prometheus_client import Histogram
 from .domain import DiscordEventOutcome
 from .exceptions import BotRuntimeError, DiscordInteractionRateLimited
 
-# TODO: use discord.Interaction.created_at for measuring event handling latency
-
 DISCORD_EVENT_DURATION_SECONDS = Histogram(
     "discord_event_duration_seconds",
     "Discord event handling duration split by time type",
@@ -20,7 +19,6 @@ DISCORD_EVENT_DURATION_SECONDS = Histogram(
     buckets=(0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 45, 60),
 )
 
-# TODO: verify if we really need sdk call measurement granulated over bot operations
 DISCORD_SDK_CALL_DURATION_SECONDS = Histogram(
     "discord_sdk_call_duration_seconds",
     "Discord SDK call duration",
@@ -32,6 +30,7 @@ DISCORD_SDK_CALL_DURATION_SECONDS = Histogram(
 @dataclass
 class DiscordEventMeasurement:
     operation: str
+    latency: float
     _start_time: float = 0.0
     _discord_seconds: float = 0.0
     _discord_user_confirmation_seconds: float = 0.0
@@ -42,8 +41,8 @@ class DiscordEventMeasurement:
 
     @classmethod
     @asynccontextmanager
-    async def start_measurement(cls, operation: str):
-        m = cls(operation=operation)
+    async def start_measurement(cls, *, operation: str, latency: float):
+        m = cls(operation=operation, latency=latency)
         m.start()
         try:
             yield m
@@ -68,14 +67,15 @@ class DiscordEventMeasurement:
             return
         self._finished = True
 
-        # NOTE: user confirmation time not included in total (which include only processing time), but reported separately
-        total = max(0.0, time.perf_counter() - self._start_time - self._discord_user_confirmation_seconds)
-        bot = max(0.0, total - self._discord_seconds)
+        # NOTE: user confirmation time not included in event_handling_time (and total) but reported separately
+        event_handling_time = max(0.0, time.perf_counter() - self._start_time - self._discord_user_confirmation_seconds)
+        bot_time = max(0.0, event_handling_time - self._discord_seconds)
 
         labels = {"operation": self.operation, "outcome": self._outcome}
-        DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="total").observe(total)
+        DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="total").observe(event_handling_time + self.latency)
+        DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="latency").observe(self.latency)
         DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="discord").observe(self._discord_seconds)
-        DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="bot").observe(bot)
+        DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="bot").observe(bot_time)
         DISCORD_EVENT_DURATION_SECONDS.labels(**labels, time_type="user").observe(
             self._discord_user_confirmation_seconds
         )
@@ -126,16 +126,17 @@ S = TypeVar("S")
 def event_measurement_decorator(
     operation: str,
 ) -> Callable[
-    [Callable[Concatenate[S, DiscordEventMeasurement, P], Awaitable[R]]],
-    Callable[Concatenate[S, P], Awaitable[R]],
+    [Callable[Concatenate[S, DiscordEventMeasurement, discord.Interaction, P], Awaitable[R]]],
+    Callable[Concatenate[S, discord.Interaction, P], Awaitable[R]],
 ]:
     def decorator(
-        func: Callable[Concatenate[S, DiscordEventMeasurement, P], Awaitable[R]],
-    ) -> Callable[Concatenate[S, P], Awaitable[R]]:
+        func: Callable[Concatenate[S, DiscordEventMeasurement, discord.Interaction, P], Awaitable[R]],
+    ) -> Callable[Concatenate[S, discord.Interaction, P], Awaitable[R]]:
         @wraps(func)
-        async def wrapper(self: S, *args: P.args, **kwargs: P.kwargs) -> R:
-            async with DiscordEventMeasurement.start_measurement(operation) as measurement:
-                return await func(self, measurement, *args, **kwargs)
+        async def wrapper(self: S, interaction: discord.Interaction, *args: P.args, **kwargs: P.kwargs) -> R:
+            latency = (datetime.datetime.now(datetime.UTC) - interaction.created_at).total_seconds()
+            async with DiscordEventMeasurement.start_measurement(operation=operation, latency=latency) as measurement:
+                return await func(self, measurement, interaction, *args, **kwargs)
 
         return wrapper
 

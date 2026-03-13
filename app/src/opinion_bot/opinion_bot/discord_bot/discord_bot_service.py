@@ -186,7 +186,6 @@ class OpinionBotClient(discord.Client):
     async def on_ready(self) -> None:
         logger.info("Discord bot ready")
 
-    # TODO: the following methods only for logging purposes (diagnosing interaction failures)
     async def on_disconnect(self) -> None:
         logger.debug("Discord bot disconnected")
 
@@ -194,7 +193,7 @@ class OpinionBotClient(discord.Client):
         logger.debug("Discord bot resumed")
 
     async def on_error(self, event_method: str, /, *args, **kwargs) -> None:
-        logger.exception("Unhandled discord bot error", exc_info=True)
+        logger.exception("Unhandled discord bot error")
 
 
 def run_bot() -> None:

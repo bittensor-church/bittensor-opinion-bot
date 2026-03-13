@@ -72,7 +72,6 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             async with self._event_measurement.discord_sdk_call(sdk_call_name="response.send_ephemeral"):
                 await self._interaction.response.send_message(content, ephemeral=True)
 
-    # TODO: IDE shows incompatible signature
     @discord_exception
     async def show_confirmation_dialog(self, *, content: str) -> bool:
         view = OpinionConfirmView(author_id=self._interaction.user.id, timeout=60.0)
@@ -91,7 +90,6 @@ class DiscordInteractionSdkAdapter(DiscordInteractionSdkAPI):
             await view.wait()
         return bool(view.confirmed)
 
-    # TODO: IDE shows incompatible signature
     @discord_exception
     async def publish_opinion(self, *, opinion_message: OpinionMessage) -> int:
         if not isinstance(self._interaction.channel, discord.TextChannel):
