@@ -21,6 +21,7 @@ class OpinionCommandEvent:
     """Discord opinion slash command interaction event"""
 
     channel_id: int
+    netuid: int
     user: InteractionUser
     emoji: str
     message: str

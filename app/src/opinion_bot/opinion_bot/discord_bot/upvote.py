@@ -1,8 +1,9 @@
+from django.conf import settings
+
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from opinion_bot.opinion_bot.discord_bot.domain import DiscordEventOutcome, OpinionUpvoteEvent
 from opinion_bot.opinion_bot.discord_bot.persistence import (
     any_key_role,
-    get_channel,
     get_opinion_by_id,
     get_opinion_by_message_id,
     get_user_valid_upvotes_for_channel,
@@ -18,13 +19,9 @@ async def handle_opinion_upvote_event(
 ) -> DiscordEventOutcome:
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
-    discord_channel = await get_channel(channel_id=event.channel_id)
-    if discord_channel is None:
+    # TODO [dtao] will it stand?
+    if event.channel_id != settings.DISCORD_CHANNEL_ID:
         await discord_interaction_sdk_adapter.followup_ephemeral("Upvoting opinions is not allowed in this channel.")
-        return "rejected"
-
-    if discord_channel.is_archived:
-        await discord_interaction_sdk_adapter.followup_ephemeral("This channel is archived. Upvoting is not allowed.")
         return "rejected"
 
     if event.message_id:
@@ -36,15 +33,13 @@ async def handle_opinion_upvote_event(
         await discord_interaction_sdk_adapter.followup_ephemeral("Unknown opinion.")
         return "rejected"
 
-    if opinion.channel_id != event.channel_id:
-        await discord_interaction_sdk_adapter.followup_ephemeral("Opinion is not in this channel.")
-        return "rejected"
-
     if opinion.author_id == event.user.user_id:
         await discord_interaction_sdk_adapter.followup_ephemeral("You can't upvote your own opinion.")
         return "rejected"
 
-    previous_upvotes = await get_user_valid_upvotes_for_channel(user_id=event.user.user_id, channel_id=event.channel_id)
+    previous_upvotes = await get_user_valid_upvotes_for_channel(
+        user_id=event.user.user_id, channel_id=opinion.channel_id
+    )
 
     if opinion.id in [upvote.opinion_id for upvote in previous_upvotes]:
         await discord_interaction_sdk_adapter.followup_ephemeral("You have already upvoted this opinion.")

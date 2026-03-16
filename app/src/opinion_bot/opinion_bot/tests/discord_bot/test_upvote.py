@@ -22,6 +22,8 @@ _NON_KEY_ROLE_IDS = (70, 80)
 
 _EMOJI = "👍"
 
+# TODO [dtao] adjust test to new model (channel --> subnet instance)
+
 
 @dataclass()
 class DbSetup:
@@ -114,6 +116,7 @@ def upvote_event_factory():
         user_roles_ids=(),
         username=_USER_NAME,
         display_name=_USER_DISPLAY_NAME,
+        channel_id=_CHANNEL_ID,
         opinion_id=None,
         message_id=None,
     ):
@@ -124,7 +127,7 @@ def upvote_event_factory():
             roles_ids=user_roles_ids,
         )
         return OpinionUpvoteEvent(
-            channel_id=_CHANNEL_ID,
+            channel_id=channel_id,
             user=user,
             opinion_id=opinion_id,
             message_id=message_id,
@@ -351,7 +354,7 @@ def test_rejects_upvote_when_channel_is_missing(db_setup_factory, mock_sdk_adapt
     # arrange
     db_setup_factory()
     mock_sdk_adapter = mock_sdk_adapter_factory()
-    event = upvote_event_factory(opinion_id=999)
+    event = upvote_event_factory(channel_id=1313, opinion_id=999)
 
     # act
     result = asyncio.run(handle_opinion_upvote_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
@@ -359,21 +362,6 @@ def test_rejects_upvote_when_channel_is_missing(db_setup_factory, mock_sdk_adapt
     # assert
     assert result == "rejected"
     mock_sdk_adapter.followup_ephemeral.assert_called_once_with("Upvoting opinions is not allowed in this channel.")
-    assert _get_upvote_count_in_channel() == 0
-
-
-def test_rejects_upvote_when_channel_is_archived(db_setup_factory, mock_sdk_adapter_factory, upvote_event_factory):
-    # arrange
-    db_setup_factory(create_channel=True, is_channel_archived=True)
-    mock_sdk_adapter = mock_sdk_adapter_factory()
-    event = upvote_event_factory(opinion_id=999)
-
-    # act
-    result = asyncio.run(handle_opinion_upvote_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
-
-    # assert
-    assert result == "rejected"
-    mock_sdk_adapter.followup_ephemeral.assert_called_once_with("This channel is archived. Upvoting is not allowed.")
     assert _get_upvote_count_in_channel() == 0
 
 
@@ -406,30 +394,6 @@ def test_rejects_upvote_when_opinion_is_unknown_by_message_id(
     # assert
     assert result == "rejected"
     mock_sdk_adapter.followup_ephemeral.assert_called_once_with("Unknown opinion.")
-    assert _get_upvote_count_in_channel() == 0
-
-
-def test_rejects_upvote_when_opinion_is_in_different_channel(
-    db_setup_factory, mock_sdk_adapter_factory, upvote_event_factory
-):
-    # arrange
-    db_setup_factory(create_channel=True)
-    opinion = Opinion.objects.create(
-        channel_id=_OTHER_CHANNEL_ID,
-        author_id=_OTHER_USER_ID,
-        emoji=_EMOJI,
-        content="other channel opinion",
-        status=Opinion.Status.VALID,
-    )
-    mock_sdk_adapter = mock_sdk_adapter_factory()
-    event = upvote_event_factory(opinion_id=opinion.id)
-
-    # act
-    result = asyncio.run(handle_opinion_upvote_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
-
-    # assert
-    assert result == "rejected"
-    mock_sdk_adapter.followup_ephemeral.assert_called_once_with("Opinion is not in this channel.")
     assert _get_upvote_count_in_channel() == 0
 
 

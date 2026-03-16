@@ -21,6 +21,8 @@ _NON_KEY_ROLE_IDS = (70, 80)
 _OPINION_MESSAGE = "This is a test opinion"
 _EMOJI = "👍"
 
+# TODO [dtao] adjust test to new model (channel --> subnet instance)
+
 
 @dataclass()
 class DbSetup:
@@ -142,6 +144,7 @@ def opinion_event_factory():
         )
         return OpinionCommandEvent(
             channel_id=_CHANNEL_ID,
+            netuid=1,  # TODO [dtao] use const variable
             user=user,
             emoji=emoji,
             message=message,
@@ -190,7 +193,7 @@ def test_saves_and_posts_featured_opinion(db_setup_factory, mock_sdk_adapter_fac
 
     mock_sdk_adapter.publish_opinion.assert_called_once_with(
         opinion_message=OpinionMessage(
-            header=f"<@{_USER_ID}> posted opinion [#{opinion.id:05d}](<http://test-opinions.com/?id={opinion.id}>)",
+            header=f"<@{_USER_ID}> posted opinion [#{opinion.id:05d}](<http://test-opinions.com/?id={opinion.id}>) about subnet 1",
             content="👍 This is a test opinion",
         )
     )
@@ -219,7 +222,7 @@ def test_saves_hidden_opinion(db_setup_factory, mock_sdk_adapter_factory, opinio
 
     mock_sdk_adapter.respond_ephemeral.assert_called_once_with(
         "Thank you for your message - it will be available in the API and various clients can display it, "
-        "but it will not be displayed publicly to prevent flooding the subnet channels with too many opinions.\n"
+        "but it will not be displayed publicly to prevent flooding the channel with too many opinions.\n"
         "Thank you for your understanding."
     )
 
@@ -352,6 +355,7 @@ def test_updates_user_roles(db_setup_factory, mock_sdk_adapter_factory, opinion_
     assert {role.role_id for role in user.user_roles.all()} == {_KEY_ROLE_IDS[1], _NON_KEY_ROLE_IDS[0]}
 
 
+# TODO [dtao] consider updating the test
 def test_rejects_opinion_when_channel_is_missing(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
     db_setup = db_setup_factory(
@@ -368,29 +372,7 @@ def test_rejects_opinion_when_channel_is_missing(db_setup_factory, mock_sdk_adap
 
     assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
     mock_sdk_adapter.publish_opinion.assert_not_called()
-    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Posting opinions is not allowed in this channel.")
-
-
-def test_rejects_opinion_when_channel_is_archived(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
-    # arrange
-    db_setup = db_setup_factory(
-        create_channel=True,
-        is_channel_archived=True,
-    )
-    mock_sdk_adapter = mock_sdk_adapter_factory()
-    event = opinion_event_factory()
-
-    # act
-    result = asyncio.run(handle_opinion_command_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
-
-    # assert
-    assert result == "rejected"
-
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
-    mock_sdk_adapter.publish_opinion.assert_not_called()
-    mock_sdk_adapter.respond_ephemeral.assert_called_once_with(
-        "This channel is archived. Posting opinions is not allowed."
-    )
+    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Unknown subnet.")
 
 
 def test_rejects_opinion_when_emoji_is_invalid(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):

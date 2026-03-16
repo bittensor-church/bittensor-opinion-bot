@@ -6,8 +6,8 @@ from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole, DiscordU
 
 
 @database_sync_to_async
-def get_channel(channel_id: int) -> DiscordChannel | None:
-    return DiscordChannel.objects.filter(id=channel_id).first()
+def get_channel_by_netuid(netuid: int) -> DiscordChannel | None:
+    return DiscordChannel.objects.filter(netuid=netuid).first()
 
 
 @database_sync_to_async
@@ -15,6 +15,7 @@ def any_key_role(role_ids: list[int]) -> bool:
     return bool(role_ids) and DiscordRole.objects.filter(id__in=role_ids, is_key_role=True).exists()
 
 
+# TODO [dtao] change into ..._for_subnet_instance
 @database_sync_to_async
 def get_user_valid_opinions_for_channel(*, user_id: int, channel_id: int) -> list[Opinion]:
     return list(
@@ -24,6 +25,7 @@ def get_user_valid_opinions_for_channel(*, user_id: int, channel_id: int) -> lis
     )
 
 
+# TODO [dtao] change into ..._for_subnet_instance
 @database_sync_to_async
 def get_user_valid_upvotes_for_channel(*, user_id: int, channel_id: int) -> list[Upvote]:
     return list(
@@ -37,6 +39,7 @@ def get_user_valid_upvotes_for_channel(*, user_id: int, channel_id: int) -> list
 def save_opinion(
     *,
     event: OpinionCommandEvent,
+    channel_id: int,  # TODO [dtao] change into subnet instance id
     is_featured: bool,
     previous_opinion_ids: list[int],
 ) -> Opinion:
@@ -46,7 +49,7 @@ def save_opinion(
         Opinion.objects.filter(id__in=previous_opinion_ids).update(status=Opinion.Status.REPLACED)
 
         opinion = Opinion.objects.create(
-            channel_id=event.channel_id,
+            channel_id=channel_id,
             author=user,
             emoji=event.emoji,
             content=event.message,
@@ -88,7 +91,7 @@ def save_upvote(
         Upvote.objects.filter(id__in=previous_upvotes_ids).update(status=Upvote.Status.REPLACED)
 
         Upvote.objects.create(
-            channel_id=event.channel_id,
+            channel_id=opinion.channel_id,
             author=user,
             opinion=opinion,
             visibility=Upvote.Visibility.FEATURED if is_featured else Upvote.Visibility.HIDDEN,
