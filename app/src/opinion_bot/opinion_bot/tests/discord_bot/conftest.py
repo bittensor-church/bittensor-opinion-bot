@@ -10,7 +10,7 @@ from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_adapter import 
 def opinions_url_settings_fixture():
     with (
         patch.object(settings, "OPINIONS_URL", "http://test-opinions.com"),
-        patch.object(settings, "DISCORD_CHANNEL_ID", 100),  # TODO [dtao] reuse const
+        patch.object(settings, "DISCORD_CHANNEL_ID", 100, create=True),  # TODO [dtao] reuse const
     ):
         yield
 
