@@ -26,6 +26,8 @@ async def handle_opinion_command_event(
     discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
 ) -> DiscordEventOutcome:
 
+    await discord_interaction_sdk_adapter.defer_ephemeral()
+
     discord_channel = await get_channel(channel_id=event.channel_id)
     if discord_channel is None:
         await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinions is not allowed in this channel.")
@@ -45,8 +47,6 @@ async def handle_opinion_command_event(
         await discord_interaction_sdk_adapter.respond_ephemeral("Opinion message can't be empty.")
         return "rejected"
 
-    await discord_interaction_sdk_adapter.defer_ephemeral()
-
     previous_opinions = await get_user_valid_opinions_for_channel(
         user_id=event.user.user_id, channel_id=event.channel_id
     )
@@ -54,7 +54,6 @@ async def handle_opinion_command_event(
         confirmed = await _confirm_replacing_opinion(
             adapter=discord_interaction_sdk_adapter, opinion=previous_opinions[0]
         )
-        logger.debug("Replacing opinion confirmed=%s for %s", confirmed, event)
         if confirmed:
             await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinion...")
     else:
