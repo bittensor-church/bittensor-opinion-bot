@@ -1,6 +1,7 @@
 import logging
 
 import emoji
+from django.conf import settings
 
 from opinion_bot.opinion_bot.models import (
     Opinion,
@@ -10,7 +11,7 @@ from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from .domain import DiscordEventOutcome, OpinionCommandEvent, OpinionMessage
 from .persistence import (
     any_key_role,
-    get_channel,
+    get_channel_by_netuid,
     get_user_valid_opinions_for_channel,
     mark_opinion_valid,
     save_opinion,
@@ -28,15 +29,15 @@ async def handle_opinion_command_event(
 
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
-    discord_channel = await get_channel(channel_id=event.channel_id)
-    if discord_channel is None:
+    # TODO [dtao] will it stand?
+    if event.channel_id != settings.DISCORD_CHANNEL_ID:
         await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinions is not allowed in this channel.")
         return "rejected"
 
-    if discord_channel.is_archived:
-        await discord_interaction_sdk_adapter.respond_ephemeral(
-            "This channel is archived. Posting opinions is not allowed."
-        )
+    # TODO [dtao] change into subnet instance
+    discord_channel = await get_channel_by_netuid(netuid=event.netuid)
+    if discord_channel is None:
+        await discord_interaction_sdk_adapter.respond_ephemeral("Unknown subnet.")
         return "rejected"
 
     if not emoji.is_emoji(event.emoji):
@@ -48,7 +49,7 @@ async def handle_opinion_command_event(
         return "rejected"
 
     previous_opinions = await get_user_valid_opinions_for_channel(
-        user_id=event.user.user_id, channel_id=event.channel_id
+        user_id=event.user.user_id, channel_id=discord_channel.id
     )
     if previous_opinions:
         confirmed = await _confirm_replacing_opinion(
@@ -67,6 +68,7 @@ async def handle_opinion_command_event(
 
     opinion = await save_opinion(
         event=event,
+        channel_id=discord_channel.id,
         is_featured=is_featured,
         previous_opinion_ids=[opinion.id for opinion in previous_opinions],
     )
@@ -81,14 +83,17 @@ async def handle_opinion_command_event(
     else:
         await discord_interaction_sdk_adapter.respond_ephemeral(
             "Thank you for your message - it will be available in the API and various clients can display it, "
-            "but it will not be displayed publicly to prevent flooding the subnet channels with too many opinions.\n"
+            "but it will not be displayed publicly to prevent flooding the channel with too many opinions.\n"
             "Thank you for your understanding."
         )
     return "success"
 
 
 async def _confirm_replacing_opinion(*, adapter: DiscordInteractionSdkAPI, opinion: Opinion) -> bool:
-    content = f"You have already posted the opinion in this channel.\n\n{opinion.emoji} {opinion.content}\n\nDo you want to replace it?"
+    # show only the prefix of a previous message if too long not to hit the following discord limitation:
+    # 400 Bad Request (error code: 50035): Invalid Form Body, In content: Must be 2000 or fewer in length.
+    previous_message = opinion.content if len(opinion.content) < 500 else opinion.content[:500] + "..."
+    content = f"You have already posted the opinion on this subnet.\n\n{opinion.emoji} {previous_message}\n\nDo you want to replace it?"
     return await adapter.show_confirmation_dialog(content=content)
 
 
@@ -97,7 +102,7 @@ async def _publish_opinion(
 ) -> int:
     user_mention = create_user_mention(event.user.user_id)
     opinion_url = create_masked_opinion_url(opinion_id)
-    message_header = f"{user_mention} posted opinion {opinion_url}"
+    message_header = f"{user_mention} posted opinion {opinion_url} about subnet {event.netuid}"
     message_content = f"{event.emoji} {event.message}"
 
     opinion_message = OpinionMessage(header=message_header, content=message_content)

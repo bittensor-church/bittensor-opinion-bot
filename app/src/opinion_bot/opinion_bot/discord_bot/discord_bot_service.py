@@ -39,9 +39,12 @@ class OpinionBotClient(discord.Client):
         @self.tree.command(guild=guild, name="opinion", description="Post an opinion to the current channel.")
         @app_commands.describe(emoji="Emoji", message="Your opinion text")
         async def opinion_command(
-            interaction: discord.Interaction, emoji: str, message: app_commands.Range[str, 1, 2000]
+            interaction: discord.Interaction,
+            netuid: app_commands.Range[int, 1, 128],
+            emoji: str,
+            message: app_commands.Range[str, 1, 2000],
         ) -> None:
-            await self.opinion(interaction, emoji, message)
+            await self.opinion(interaction, netuid, emoji, message)
 
         @self.tree.command(
             guild=guild, name="opinion-upvote", description="Upvote given opinion on the current channel."
@@ -52,7 +55,12 @@ class OpinionBotClient(discord.Client):
 
     @event_measurement_decorator("opinion_command")
     async def opinion(
-        self, measurement: DiscordEventMeasurement, interaction: discord.Interaction, emoji: str, message: str
+        self,
+        measurement: DiscordEventMeasurement,
+        interaction: discord.Interaction,
+        netuid: int,
+        emoji: str,
+        message: str,
     ) -> None:
         adapter = create_discord_interaction_sdk_adapter(interaction, measurement)
         try:
@@ -69,6 +77,7 @@ class OpinionBotClient(discord.Client):
 
             opinion_event = OpinionCommandEvent(
                 channel_id=interaction.channel_id,
+                netuid=netuid,
                 user=adapter.user,
                 emoji=emoji.strip(),
                 message=message,
@@ -186,7 +195,6 @@ class OpinionBotClient(discord.Client):
     async def on_ready(self) -> None:
         logger.info("Discord bot ready")
 
-    # TODO: the following methods only for logging purposes (diagnosing interaction failures)
     async def on_disconnect(self) -> None:
         logger.debug("Discord bot disconnected")
 
@@ -194,7 +202,7 @@ class OpinionBotClient(discord.Client):
         logger.debug("Discord bot resumed")
 
     async def on_error(self, event_method: str, /, *args, **kwargs) -> None:
-        logger.exception("Unhandled discord bot error", exc_info=True)
+        logger.exception("Unhandled discord bot error")
 
 
 def run_bot() -> None:

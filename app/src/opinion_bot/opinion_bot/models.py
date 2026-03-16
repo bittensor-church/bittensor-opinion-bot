@@ -168,6 +168,8 @@ class UserRole(models.Model):
         return f"{self.user} has {self.role}"
 
 
+# TODO [dtao] rename to SubnetInstance, change all usages (including functions like get_user_valid_opinions_for_channel)
+#             change id into automatic
 class DiscordChannel(models.Model):
     """
     Discord channels with their subnets netuids
