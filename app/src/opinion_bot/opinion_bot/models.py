@@ -1,55 +1,6 @@
 from django.db import models
 
 
-class SubnetInstance(models.Model):
-    """
-    A subnet registration instance, keyed by (netuid, registration_block).
-
-    IMMUTABLE:
-    - Once created, subnet instances are not updated
-    - Ownership changes (coldkey swaps) are tracked separately, not here
-
-    WHY VERSIONED:
-    - Subnets can be deregistered and re-registered on the same netuid
-    - Each registration is a NEW instance to avoid mixing old/new opinions
-    - Only one instance per netuid should be active at a time
-
-    LIFECYCLE:
-    - Created when a new subnet is registered (from Sentinel API)
-    - deregistration_block set when subnet deregisters (instance becomes inactive)
-    - Old opinions remain linked to the old instance (archived)
-    """
-
-    netuid = models.PositiveIntegerField(db_index=True)
-    name = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Human-readable subnet name",
-    )
-    registration_block = models.PositiveBigIntegerField(
-        help_text="Block number when this subnet was registered",
-    )
-    deregistration_block = models.PositiveBigIntegerField(
-        null=True,
-        blank=True,
-        help_text="Block number when deregistered (null = still active)",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ["netuid", "registration_block"]
-        verbose_name = "Subnet Instance"
-        verbose_name_plural = "Subnet Instances"
-
-    def __str__(self) -> str:
-        status = "active" if self.is_active else "archived"
-        return f"Subnet {self.netuid} (block {self.registration_block}) - {status}"
-
-    @property
-    def is_active(self) -> bool:
-        """Subnet is active if it hasn't been deregistered."""
-        return self.deregistration_block is None
-
 
 class DiscordUser(models.Model):
     """
