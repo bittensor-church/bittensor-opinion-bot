@@ -2,11 +2,13 @@ from django.conf import settings
 
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from opinion_bot.opinion_bot.discord_bot.domain import DiscordEventOutcome, OpinionUpvoteEvent
+from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
 from opinion_bot.opinion_bot.discord_bot.persistence import (
     any_key_role,
     get_opinion_by_id,
     get_opinion_by_message_id,
-    get_user_valid_upvotes_for_channel,
+    get_subnet_instance_by_id,
+    get_user_valid_upvotes_for_subnet_instance,
     save_upvote,
 )
 from opinion_bot.opinion_bot.discord_bot.utils import create_masked_opinion_url
@@ -19,7 +21,6 @@ async def handle_opinion_upvote_event(
 ) -> DiscordEventOutcome:
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
-    # TODO [dtao] will it stand?
     if event.channel_id != settings.DISCORD_CHANNEL_ID:
         await discord_interaction_sdk_adapter.followup_ephemeral("Upvoting opinions is not allowed in this channel.")
         return "rejected"
@@ -33,12 +34,23 @@ async def handle_opinion_upvote_event(
         await discord_interaction_sdk_adapter.followup_ephemeral("Unknown opinion.")
         return "rejected"
 
+    subnet_instance = await get_subnet_instance_by_id(opinion.subnet_instance_id)
+
+    if subnet_instance is None:
+        raise BotRuntimeError(f"Subnet instance {opinion.subnet_instance_id} not found")
+
+    if subnet_instance.is_archived:
+        await discord_interaction_sdk_adapter.followup_ephemeral(
+            "You can't upvote opinions about archived subnet instance."
+        )
+        return "rejected"
+
     if opinion.author_id == event.user.user_id:
         await discord_interaction_sdk_adapter.followup_ephemeral("You can't upvote your own opinion.")
         return "rejected"
 
-    previous_upvotes = await get_user_valid_upvotes_for_channel(
-        user_id=event.user.user_id, channel_id=opinion.channel_id
+    previous_upvotes = await get_user_valid_upvotes_for_subnet_instance(
+        user_id=event.user.user_id, subnet_instance_id=opinion.subnet_instance_id
     )
 
     if opinion.id in [upvote.opinion_id for upvote in previous_upvotes]:

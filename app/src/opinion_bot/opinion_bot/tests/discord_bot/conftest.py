@@ -4,13 +4,14 @@ import pytest
 from django.conf import settings
 
 from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_adapter import DiscordInteractionSdkAdapter
+from opinion_bot.opinion_bot.tests.discord_bot.const import UNIT_TEST_DISCORD_CHANNEL_ID
 
 
 @pytest.fixture(autouse=True)
 def opinions_url_settings_fixture():
     with (
         patch.object(settings, "OPINIONS_URL", "http://test-opinions.com"),
-        patch.object(settings, "DISCORD_CHANNEL_ID", 100, create=True),  # TODO [dtao] reuse const
+        patch.object(settings, "DISCORD_CHANNEL_ID", UNIT_TEST_DISCORD_CHANNEL_ID, create=True),
     ):
         yield
 

@@ -3,7 +3,6 @@
 from django.db import migrations
 
 
-
 def delete_opinions_and_upvotes(apps, schema_editor):
     Opinion = apps.get_model("opinion_bot", "Opinion")
     Upvote = apps.get_model("opinion_bot", "Upvote")
@@ -12,7 +11,6 @@ def delete_opinions_and_upvotes(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("opinion_bot", "0006_alter_opinion_channel_alter_upvote_channel_and_more"),
     ]

@@ -1,7 +1,7 @@
 from django.contrib import admin  # noqa
 from django.contrib.admin import register  # noqa
 
-from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole
+from opinion_bot.opinion_bot.models import DiscordRole, SubnetInstance
 
 admin.site.site_header = "opinion_bot Administration"
 admin.site.site_title = "opinion_bot"
@@ -18,11 +18,11 @@ class DiscordRoleAdmin(admin.ModelAdmin):
     list_editable = ("name", "slug", "is_key_role")
 
 
-@admin.register(DiscordChannel)
-class DiscordChannelAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "netuid", "is_archived", "updated_at")
+@admin.register(SubnetInstance)
+class SubnetInstanceAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "netuid", "is_archived", "created_at", "updated_at")
     list_filter = ("is_archived", "netuid")
     search_fields = ("id", "name")
     ordering = ("netuid", "is_archived", "name", "id")
-    readonly_fields = ("updated_at",)
+    readonly_fields = ("created_at", "updated_at")
     list_editable = ("name", "netuid", "is_archived")

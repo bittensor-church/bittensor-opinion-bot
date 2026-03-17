@@ -15,10 +15,13 @@ It's primary responsibility is to allow to submit **opinions** (using `/opinion`
 - or using `/opinion-upvote` slash command
 
 The rules are:
-1. opinions can be submitted only in whitelisted channels that are not archived
-2. only opinions submitted by users with whitelisted roles are posted as discord messages
-3. a single opinion per channel per user, a new opinion replaces the old one (status change, the message stays on the channel)
-4. single upvote per channel per user, a new upvote replaces the old one (status change)
+1. the admin manually manages a list of subnet instances
+2. opinions can be submitted and upvoted in only in one designated channel (configured in `.env`)
+3. opinions can be submitted only to not archived subnet instance
+4. only opinions submitted by users with whitelisted roles are posted as discord messages
+5. a single opinion per subnet instance per user, a new opinion replaces the old one (status change, the message stays on the channel)
+6. only opinions for not archived subnet instances can be upvoted
+7. single upvote per subnet instance per user, a new upvote replaces the old one (status change)
 
 This data is then accessible for easy in a public grafana instance. The value provided by it is: critical opinions
 posted by important people of the ecosystem (denoted by discord roles) about specific subnets (identified 1:1 by discord
@@ -53,7 +56,7 @@ Create a bot application in the Discord Developer Portal https://discord.com/dev
   - switch on scopes: "bot", "applications.commands"
   - no need to set any permissions as long as the bot acts only within discord interactions (responds to slash commands 
     and custom buttons)
-  - if the bot needs to post messages in a channel from a background task, it has to be given the following permissions:
+  - (in case of future development) if the bot needs to post messages in a channel from a background task, it has to be given the following permissions:
     - View Channels
     - Send Messages
     - Embed Links
@@ -61,10 +64,13 @@ Create a bot application in the Discord Developer Portal https://discord.com/dev
 
 ### Configure the bot application (`.env` setup)
 
-  - use "Reset Token" button on the "Bot" tab in the bot application settings to generate a new token 
+- set `CONNECT_TO_DISCORD=True`   
+- use "Reset Token" button on the "Bot" tab in the bot application settings to generate a new token 
     and put it into `DISCORD_BOT_TOKEN`
   - put the guild's numeric ID into `DISCORD_GUILD_ID` (the bot registers slash commands for this guild).
     - guild ID can be found in the URL of the guild's channel in the browser `discord.com/channels/<GuildID>/<ChannelID>`
+  - put the designated opinion channel ID into `DISCORD_CHANNEL_ID`
+    - channel ID can be found in the URL of the channel in the browser `discord.com/channels/<GuildID>/<ChannelID>`
   - set opinions url in `OPINIONS_URL` (e.g. `https://staging.opinion-bot.bactensor.io/opinions`),
     this is used to create links in opinion messages and upvote confirmation messages
   - set grafana opinion details dashboard url in `OPINION_DETAILS_REDIRECT_URL` 
@@ -78,8 +84,7 @@ Create a bot application in the Discord Developer Portal https://discord.com/dev
 
 To make posting work in the right places, an operator must prepare a few database records via the Django Admin UI (`/admin`):
 
-- Channel whitelist: create DiscordChannel objects from the admin panel
-  - Channel ID can be found in the URL of the guild in the browser `discord.com/channels/<GuildID>/<ChannelID>`
+- Subnet instances: create SubnetInstance objects from the admin panel
 - Roles: create DiscordRole objects from the admin panel
   - Role ID can be taken from the Discord Server Settings / Roles / 3 dots menu / Copy Role ID
   - To activate Copy Role ID action, switch on "Developer Mode" in your Discord Account Settings / Advanced
@@ -101,16 +106,25 @@ The bot should post it with an Upvote button.
 
 Click the Upvote button. The bot should respond with `You can't upvote your own opinion.` message.
 
-## Fake data generation
+## Initial and fake data generation
+
+### Initial subnet instances generation
+
+Run `python app/src/manage.py create_subnet_instances` to generate fake data for grafana testing.
+
+First, you may want to update the subnet list hardcoded in the script using the result of `parse_subnet_list` 
+management command run on the list obtained by `btcli subnet list --subtensor.network finney`.
+
+### Fake data generation
 
 Run `python app/src/manage.py generate_fake_data` to generate fake data for grafana testing:
 - **data created only in DB, not on discord**,
-- create missing channels with netuid in the given range (default 1..128)
+- use existing subnet instances that are not archived,
 - create missing users with ids in the given range (default 1..1000)
 - give random user roles to created users with even ids
 - delete upvotes and opinions from users in the given range
-- for each user in the given range create opinions in randomly picked channels and upvote randomly picked opinion
-  in randomly picked channels (non-uniform distribution)
+- for each user in the given range create opinions for randomly picked subnet instances and upvote randomly picked opinion
+  in randomly picked subnet instances (non-uniform distribution)
 
 
 # Base requirements

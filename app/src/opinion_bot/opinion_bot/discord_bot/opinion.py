@@ -11,8 +11,8 @@ from .discord_interaction_sdk_api import DiscordInteractionSdkAPI
 from .domain import DiscordEventOutcome, OpinionCommandEvent, OpinionMessage
 from .persistence import (
     any_key_role,
-    get_channel_by_netuid,
-    get_user_valid_opinions_for_channel,
+    get_active_subnet_instance_by_netuid,
+    get_user_valid_opinions_for_subnet_instance,
     mark_opinion_valid,
     save_opinion,
 )
@@ -29,15 +29,13 @@ async def handle_opinion_command_event(
 
     await discord_interaction_sdk_adapter.defer_ephemeral()
 
-    # TODO [dtao] will it stand?
     if event.channel_id != settings.DISCORD_CHANNEL_ID:
         await discord_interaction_sdk_adapter.respond_ephemeral("Posting opinions is not allowed in this channel.")
         return "rejected"
 
-    # TODO [dtao] change into subnet instance
-    discord_channel = await get_channel_by_netuid(netuid=event.netuid)
-    if discord_channel is None:
-        await discord_interaction_sdk_adapter.respond_ephemeral("Unknown subnet.")
+    subnet_instance = await get_active_subnet_instance_by_netuid(netuid=event.netuid)
+    if subnet_instance is None:
+        await discord_interaction_sdk_adapter.respond_ephemeral("Unknown or archived subnet.")
         return "rejected"
 
     if not emoji.is_emoji(event.emoji):
@@ -48,8 +46,8 @@ async def handle_opinion_command_event(
         await discord_interaction_sdk_adapter.respond_ephemeral("Opinion message can't be empty.")
         return "rejected"
 
-    previous_opinions = await get_user_valid_opinions_for_channel(
-        user_id=event.user.user_id, channel_id=discord_channel.id
+    previous_opinions = await get_user_valid_opinions_for_subnet_instance(
+        user_id=event.user.user_id, subnet_instance_id=subnet_instance.id
     )
     if previous_opinions:
         confirmed = await _confirm_replacing_opinion(
@@ -68,7 +66,7 @@ async def handle_opinion_command_event(
 
     opinion = await save_opinion(
         event=event,
-        channel_id=discord_channel.id,
+        subnet_instance_id=subnet_instance.id,
         is_featured=is_featured,
         previous_opinion_ids=[opinion.id for opinion in previous_opinions],
     )
