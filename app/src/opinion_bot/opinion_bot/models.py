@@ -1,56 +1,6 @@
 from django.db import models
 
 
-class SubnetInstance(models.Model):
-    """
-    A subnet registration instance, keyed by (netuid, registration_block).
-
-    IMMUTABLE:
-    - Once created, subnet instances are not updated
-    - Ownership changes (coldkey swaps) are tracked separately, not here
-
-    WHY VERSIONED:
-    - Subnets can be deregistered and re-registered on the same netuid
-    - Each registration is a NEW instance to avoid mixing old/new opinions
-    - Only one instance per netuid should be active at a time
-
-    LIFECYCLE:
-    - Created when a new subnet is registered (from Sentinel API)
-    - deregistration_block set when subnet deregisters (instance becomes inactive)
-    - Old opinions remain linked to the old instance (archived)
-    """
-
-    netuid = models.PositiveIntegerField(db_index=True)
-    name = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Human-readable subnet name",
-    )
-    registration_block = models.PositiveBigIntegerField(
-        help_text="Block number when this subnet was registered",
-    )
-    deregistration_block = models.PositiveBigIntegerField(
-        null=True,
-        blank=True,
-        help_text="Block number when deregistered (null = still active)",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ["netuid", "registration_block"]
-        verbose_name = "Subnet Instance"
-        verbose_name_plural = "Subnet Instances"
-
-    def __str__(self) -> str:
-        status = "active" if self.is_active else "archived"
-        return f"Subnet {self.netuid} (block {self.registration_block}) - {status}"
-
-    @property
-    def is_active(self) -> bool:
-        """Subnet is active if it hasn't been deregistered."""
-        return self.deregistration_block is None
-
-
 class DiscordUser(models.Model):
     """
     A Discord user with their current username/display name.
@@ -168,48 +118,33 @@ class UserRole(models.Model):
         return f"{self.user} has {self.role}"
 
 
-# TODO [dtao] rename to SubnetInstance, change all usages (including functions like get_user_valid_opinions_for_channel)
-#             change id into automatic
-class DiscordChannel(models.Model):
+class SubnetInstance(models.Model):
     """
-    Discord channels with their subnets netuids
-
-    ARCHIVING:
-    - is_archived=True hides channel from default views
-    - Archived channels can be shown optionally in queries
-
-    ADMIN USAGE:
-    - Create one mapping per subnet channel in Discord
-    - Set is_archived=True when channel is no longer active
+    Subnet instances managed manually by the admin.
     """
 
-    id = models.BigIntegerField(
-        primary_key=True,
-        help_text="Discord channel snowflake ID",
-    )
     name = models.CharField(
         max_length=255,
-        blank=True,
-        help_text="Channel name (for admin display)",
+        help_text="Human readable subnet instance name",
     )
-    netuid = models.PositiveIntegerField(
-        db_index=True,
-        help_text="Subnet netuid this channel is mapped to",
-    )
+    netuid = models.PositiveIntegerField()
     is_archived = models.BooleanField(
         default=False,
         db_index=True,
-        help_text="Archived channels hidden by default",
     )
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Discord Channel"
-        verbose_name_plural = "Discord Channels"
+        verbose_name = "Subnet Instance"
+        verbose_name_plural = "Subnet Instances"
+        indexes = [
+            models.Index(fields=["is_archived", "netuid"]),
+        ]
 
     def __str__(self) -> str:
         archived = " [ARCHIVED]" if self.is_archived else ""
-        return f"#{self.name or self.id} → Subnet {self.netuid}{archived}"
+        return f"#{self.id} → Subnet {self.netuid} {self.name}{archived}"
 
 
 class Opinion(models.Model):
@@ -223,7 +158,7 @@ class Opinion(models.Model):
     STATUS:
     - PENDING: FEATURED opinion not yet posted to Discord
     - VALID: valid opinion (FEATURED posted to Discord or HIDDEN) and not yet replaced
-    - REPLACED: replaced by another opinion from the same user in the same channel
+    - REPLACED: replaced by another opinion from the same user for the same subnet instance
     """
 
     class Visibility(models.TextChoices):
@@ -235,9 +170,8 @@ class Opinion(models.Model):
         VALID = "valid", "Valid"
         REPLACED = "replaced", "Replaced"
 
-    # Channel
-    channel = models.ForeignKey(
-        DiscordChannel,
+    subnet_instance = models.ForeignKey(
+        SubnetInstance,
         on_delete=models.RESTRICT,
         related_name="opinions",
     )
@@ -290,13 +224,13 @@ class Opinion(models.Model):
         verbose_name_plural = "Opinions"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["channel", "visibility", "status", "created_at"]),
-            models.Index(fields=["channel", "author", "status", "created_at"]),
+            models.Index(fields=["subnet_instance", "visibility", "status", "created_at"]),
+            models.Index(fields=["subnet_instance", "author", "status", "created_at"]),
             models.Index(fields=["message_id"]),
         ]
 
     def __str__(self) -> str:
-        return f"{self.emoji} by {self.author} on channel {self.channel.id}"
+        return f"{self.emoji} by {self.author} on subnet {self.subnet_instance.netuid}"
 
 
 class Upvote(models.Model):
@@ -309,7 +243,7 @@ class Upvote(models.Model):
 
     STATUS:
     - VALID: valid upvote (not yet moved to another opinion)
-    - REPLACED: replaced by another upvote from the same user in the same channel
+    - REPLACED: replaced by another upvote from the same user for an opinion for the same subnet instance
     """
 
     class Visibility(models.TextChoices):
@@ -320,9 +254,9 @@ class Upvote(models.Model):
         VALID = "valid", "Valid"
         REPLACED = "replaced", "Replaced"
 
-    # Channel
-    channel = models.ForeignKey(
-        DiscordChannel,
+    # Subnet Instance
+    subnet_instance = models.ForeignKey(
+        SubnetInstance,
         on_delete=models.RESTRICT,
         related_name="upvotes",
     )
@@ -366,9 +300,9 @@ class Upvote(models.Model):
         verbose_name_plural = "Upvotes"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["channel", "visibility", "status", "created_at"]),
-            models.Index(fields=["channel", "author", "status"]),
+            models.Index(fields=["subnet_instance", "visibility", "status", "created_at"]),
+            models.Index(fields=["subnet_instance", "author", "status"]),
         ]
 
     def __str__(self) -> str:
-        return f"Upvote for opinion {self.opinion_id} on channel {self.channel.id}"
+        return f"Upvote for opinion {self.opinion_id} on subnet {self.subnet_instance.netuid}"

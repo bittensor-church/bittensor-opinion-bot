@@ -40,7 +40,7 @@ class OpinionBotClient(discord.Client):
         @app_commands.describe(emoji="Emoji", message="Your opinion text")
         async def opinion_command(
             interaction: discord.Interaction,
-            netuid: app_commands.Range[int, 1, 128],
+            netuid: app_commands.Range[int, 1, 256],  # ready for a potential upcoming slot number increase 128 -> 256
             emoji: str,
             message: app_commands.Range[str, 1, 2000],
         ) -> None:

@@ -7,9 +7,10 @@ import pytest
 
 from opinion_bot.opinion_bot.discord_bot.domain import InteractionUser, OpinionCommandEvent, OpinionMessage
 from opinion_bot.opinion_bot.discord_bot.opinion import handle_opinion_command_event
-from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole, DiscordUser, Opinion, UserRole
+from opinion_bot.opinion_bot.models import DiscordRole, DiscordUser, Opinion, SubnetInstance, UserRole
+from opinion_bot.opinion_bot.tests.discord_bot.const import UNIT_TEST_DISCORD_CHANNEL_ID
 
-_CHANNEL_ID = 100
+_NETUID = 1
 
 _USER_ID = 10
 _USER_NAME = "testuser"
@@ -21,16 +22,15 @@ _NON_KEY_ROLE_IDS = (70, 80)
 _OPINION_MESSAGE = "This is a test opinion"
 _EMOJI = "👍"
 
-# TODO [dtao] adjust test to new model (channel --> subnet instance)
-
 
 @dataclass()
 class DbSetup:
+    subnet_instance_id: int | None = None
     other_user_opinion_id: int | None = None
-    user_opinion_in_other_channel_id: int | None = None
+    user_opinion_for_other_subnet_instance_id: int | None = None
     previous_opinions_ids: list[int] = field(default_factory=list)
 
-    def existing_opinions_in_channel_count(self):
+    def existing_opinions_for_subnet_instance_count(self):
         return len(self.previous_opinions_ids) + (1 if self.other_user_opinion_id is not None else 0)
 
 
@@ -38,8 +38,8 @@ class DbSetup:
 def db_setup_factory(transactional_db):
     def make_db_setup(
         *,
-        create_channel=False,
-        is_channel_archived=False,
+        create_subnet_instance=False,
+        is_subnet_instance_archived=False,
         create_user=False,
         user_roles_ids=(),
         create_previous_opinions=False,
@@ -60,17 +60,21 @@ def db_setup_factory(transactional_db):
             display_name="Other User",
         )
 
-        other_channel = DiscordChannel.objects.create(id=_CHANNEL_ID + 1, netuid=2, is_archived=False)
+        other_subnet_instance = SubnetInstance.objects.create(netuid=_NETUID + 1, is_archived=False)
 
-        if create_channel:
-            DiscordChannel.objects.create(id=_CHANNEL_ID, netuid=1, is_archived=is_channel_archived)
+        if create_subnet_instance:
+            subnet_instance = SubnetInstance.objects.create(netuid=_NETUID, is_archived=is_subnet_instance_archived)
+            db_setup.subnet_instance_id = subnet_instance.id
             db_setup.other_user_opinion_id = Opinion.objects.create(
-                channel_id=_CHANNEL_ID,
+                subnet_instance_id=subnet_instance.id,
                 author_id=other_user.id,
                 emoji=_EMOJI,
-                content="other user's opinion in the same channel",
+                content="other user's opinion for the same subnet instance",
                 status=Opinion.Status.VALID,
             ).id
+            if not is_subnet_instance_archived:
+                # older archived instance for the same netuid
+                SubnetInstance.objects.create(netuid=_NETUID, is_archived=False)
 
         if create_user or create_previous_opinions:
             user = DiscordUser.objects.create(
@@ -81,18 +85,18 @@ def db_setup_factory(transactional_db):
             for role_id in user_roles_ids:
                 UserRole.objects.create(user=user, role_id=role_id)
 
-            db_setup.user_opinion_in_other_channel_id = Opinion.objects.create(
-                channel_id=other_channel.id,
+            db_setup.user_opinion_for_other_subnet_instance_id = Opinion.objects.create(
+                subnet_instance_id=other_subnet_instance.id,
                 author_id=_USER_ID,
                 emoji=_EMOJI,
-                content="opinion in other channel",
+                content="opinion about other subnet",
                 status=Opinion.Status.VALID,
             ).id
 
             if create_previous_opinions:
                 previous_opinions = [
                     Opinion.objects.create(
-                        channel_id=_CHANNEL_ID,
+                        subnet_instance_id=db_setup.subnet_instance_id,
                         author_id=_USER_ID,
                         emoji=_EMOJI,
                         content=content,
@@ -114,12 +118,12 @@ def db_setup_factory(transactional_db):
     return make_db_setup
 
 
-def _get_opinion_in_channel_count():
-    return Opinion.objects.filter(channel_id=_CHANNEL_ID).count()
+def _get_opinion_in_subnet_instance_count(*, subnet_instance_id):
+    return Opinion.objects.filter(subnet_instance_id=subnet_instance_id).count()
 
 
-def _get_last_opinion_by_channel_and_author(channel_id, author_id):
-    return Opinion.objects.filter(channel_id=channel_id, author_id=author_id).order_by("-id").first()
+def _get_last_opinion_by_subnet_instance_and_author(*, subnet_instance_id, author_id):
+    return Opinion.objects.filter(subnet_instance_id=subnet_instance_id, author_id=author_id).order_by("-id").first()
 
 
 def _get_opinion_statuses_by_ids(opinion_ids):
@@ -130,6 +134,7 @@ def _get_opinion_statuses_by_ids(opinion_ids):
 def opinion_event_factory():
     def make_event(
         *,
+        channel_id=UNIT_TEST_DISCORD_CHANNEL_ID,
         user_roles_ids=(),
         username=_USER_NAME,
         display_name=_USER_DISPLAY_NAME,
@@ -143,8 +148,8 @@ def opinion_event_factory():
             roles_ids=user_roles_ids,
         )
         return OpinionCommandEvent(
-            channel_id=_CHANNEL_ID,
-            netuid=1,  # TODO [dtao] use const variable
+            channel_id=channel_id,
+            netuid=_NETUID,
             user=user,
             emoji=emoji,
             message=message,
@@ -170,8 +175,8 @@ def test_defers_response_first(db_setup_factory, mock_sdk_adapter_factory, opini
 
 def test_saves_and_posts_featured_opinion(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
-    db_setup_factory(
-        create_channel=True,
+    db_setup = db_setup_factory(
+        create_subnet_instance=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory(new_opinion_message_id=333)
     event = opinion_event_factory(user_roles_ids=(_KEY_ROLE_IDS[0], _NON_KEY_ROLE_IDS[0]))
@@ -184,7 +189,9 @@ def test_saves_and_posts_featured_opinion(db_setup_factory, mock_sdk_adapter_fac
 
     mock_sdk_adapter.show_confirmation_dialog.assert_not_called()
 
-    opinion = _get_last_opinion_by_channel_and_author(channel_id=event.channel_id, author_id=event.user.user_id)
+    opinion = _get_last_opinion_by_subnet_instance_and_author(
+        subnet_instance_id=db_setup.subnet_instance_id, author_id=event.user.user_id
+    )
     assert opinion.content == event.message
     assert opinion.emoji == event.emoji
     assert opinion.visibility == Opinion.Visibility.FEATURED
@@ -201,7 +208,7 @@ def test_saves_and_posts_featured_opinion(db_setup_factory, mock_sdk_adapter_fac
 
 def test_saves_hidden_opinion(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
-    db_setup_factory(create_channel=True)
+    db_setup = db_setup_factory(create_subnet_instance=True)
 
     mock_sdk_adapter = mock_sdk_adapter_factory()
     event = opinion_event_factory()
@@ -212,7 +219,9 @@ def test_saves_hidden_opinion(db_setup_factory, mock_sdk_adapter_factory, opinio
     # assert
     assert result == "success"
 
-    opinion = _get_last_opinion_by_channel_and_author(channel_id=event.channel_id, author_id=event.user.user_id)
+    opinion = _get_last_opinion_by_subnet_instance_and_author(
+        subnet_instance_id=db_setup.subnet_instance_id, author_id=event.user.user_id
+    )
     assert opinion.content == event.message
     assert opinion.emoji == event.emoji
     assert opinion.visibility == Opinion.Visibility.HIDDEN
@@ -232,7 +241,7 @@ def test_does_not_replace_previous_opinion_when_user_cancels(
 ):
     # arrange
     db_setup = db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
         create_previous_opinions=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
@@ -247,12 +256,15 @@ def test_does_not_replace_previous_opinion_when_user_cancels(
     mock_sdk_adapter.show_confirmation_dialog.assert_called_once()
     assert "most recent VALID opinion" in mock_sdk_adapter.show_confirmation_dialog.call_args.kwargs["content"]
 
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
     statuses = _get_opinion_statuses_by_ids(
         [
             *db_setup.previous_opinions_ids,
             db_setup.other_user_opinion_id,
-            db_setup.user_opinion_in_other_channel_id,
+            db_setup.user_opinion_for_other_subnet_instance_id,
         ]
     )
     assert statuses == [Opinion.Status.REPLACED] + [Opinion.Status.VALID] * 4
@@ -265,7 +277,7 @@ def test_replaces_previous_opinion_when_user_confirms(
 ):
     # arrange
     db_setup = db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
         create_previous_opinions=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory(confirmation_result=True)
@@ -279,12 +291,15 @@ def test_replaces_previous_opinion_when_user_confirms(
 
     mock_sdk_adapter.show_confirmation_dialog.assert_called_once()
 
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count() + 1
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count() + 1
+    )
     statuses = _get_opinion_statuses_by_ids(
         [
             *db_setup.previous_opinions_ids,
             db_setup.other_user_opinion_id,
-            db_setup.user_opinion_in_other_channel_id,
+            db_setup.user_opinion_for_other_subnet_instance_id,
         ]
     )
     assert statuses == [Opinion.Status.REPLACED] * 3 + [Opinion.Status.VALID] * 2
@@ -295,7 +310,7 @@ def test_creates_user_with_known_roles_when_not_exists(
 ):
     # arrange
     db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
     event = opinion_event_factory(user_roles_ids=(_KEY_ROLE_IDS[0], _NON_KEY_ROLE_IDS[0], 888, 999))
@@ -315,7 +330,7 @@ def test_creates_user_with_known_roles_when_not_exists(
 def test_update_user_when_exists(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
     db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
         create_user=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
@@ -338,7 +353,7 @@ def test_update_user_when_exists(db_setup_factory, mock_sdk_adapter_factory, opi
 def test_updates_user_roles(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
     db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
         create_user=True,
         user_roles_ids=(_KEY_ROLE_IDS[0], _NON_KEY_ROLE_IDS[0], _NON_KEY_ROLE_IDS[1]),
     )
@@ -355,11 +370,34 @@ def test_updates_user_roles(db_setup_factory, mock_sdk_adapter_factory, opinion_
     assert {role.role_id for role in user.user_roles.all()} == {_KEY_ROLE_IDS[1], _NON_KEY_ROLE_IDS[0]}
 
 
-# TODO [dtao] consider updating the test
-def test_rejects_opinion_when_channel_is_missing(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
+def test_rejects_opinion_when_channel_is_invalid(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
     db_setup = db_setup_factory(
-        create_channel=False,
+        create_subnet_instance=True,
+    )
+    mock_sdk_adapter = mock_sdk_adapter_factory()
+    event = opinion_event_factory(channel_id=UNIT_TEST_DISCORD_CHANNEL_ID + 1)
+
+    # act
+    result = asyncio.run(handle_opinion_command_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
+
+    # assert
+    assert result == "rejected"
+
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
+    mock_sdk_adapter.publish_opinion.assert_not_called()
+    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Posting opinions is not allowed in this channel.")
+
+
+def test_rejects_opinion_when_subnet_instance_is_missing(
+    db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory
+):
+    # arrange
+    db_setup = db_setup_factory(
+        create_subnet_instance=False,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
     event = opinion_event_factory()
@@ -370,15 +408,43 @@ def test_rejects_opinion_when_channel_is_missing(db_setup_factory, mock_sdk_adap
     # assert
     assert result == "rejected"
 
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
     mock_sdk_adapter.publish_opinion.assert_not_called()
-    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Unknown subnet.")
+    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Unknown or archived subnet.")
+
+
+def test_rejects_opinion_when_subnet_instance_is_archived(
+    db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory
+):
+    # arrange
+    db_setup = db_setup_factory(
+        create_subnet_instance=True,
+        is_subnet_instance_archived=True,
+    )
+    mock_sdk_adapter = mock_sdk_adapter_factory()
+    event = opinion_event_factory()
+
+    # act
+    result = asyncio.run(handle_opinion_command_event(event=event, discord_interaction_sdk_adapter=mock_sdk_adapter))
+
+    # assert
+    assert result == "rejected"
+
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
+    mock_sdk_adapter.publish_opinion.assert_not_called()
+    mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Unknown or archived subnet.")
 
 
 def test_rejects_opinion_when_emoji_is_invalid(db_setup_factory, mock_sdk_adapter_factory, opinion_event_factory):
     # arrange
     db_setup = db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
     event = opinion_event_factory(emoji=":heart:")
@@ -389,7 +455,10 @@ def test_rejects_opinion_when_emoji_is_invalid(db_setup_factory, mock_sdk_adapte
     # assert
     assert result == "rejected"
 
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
     mock_sdk_adapter.publish_opinion.assert_not_called()
     mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Invalid emoji: :heart:")
 
@@ -399,7 +468,7 @@ def test_rejects_opinion_when_message_text_is_missing(
 ):
     # arrange
     db_setup = db_setup_factory(
-        create_channel=True,
+        create_subnet_instance=True,
     )
     mock_sdk_adapter = mock_sdk_adapter_factory()
     event = opinion_event_factory(message="")
@@ -410,6 +479,9 @@ def test_rejects_opinion_when_message_text_is_missing(
     # assert
     assert result == "rejected"
 
-    assert _get_opinion_in_channel_count() == db_setup.existing_opinions_in_channel_count()
+    assert (
+        _get_opinion_in_subnet_instance_count(subnet_instance_id=db_setup.subnet_instance_id)
+        == db_setup.existing_opinions_for_subnet_instance_count()
+    )
     mock_sdk_adapter.publish_opinion.assert_not_called()
     mock_sdk_adapter.respond_ephemeral.assert_called_once_with("Opinion message can't be empty.")

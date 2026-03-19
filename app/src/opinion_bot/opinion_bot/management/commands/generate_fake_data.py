@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from opinion_bot.opinion_bot.models import DiscordChannel, DiscordRole, DiscordUser, Opinion, Upvote, UserRole
+from opinion_bot.opinion_bot.models import DiscordRole, DiscordUser, Opinion, SubnetInstance, Upvote, UserRole
 
 _EMOJIS = ["👍", "👎", "❤️", "🤮", "🚀", "🪙", "😭"]
 
@@ -77,29 +77,14 @@ class _Config:
     user_id_from: int = 1
     user_id_to: int = 1000
 
-    netuid_from: int = 1
-    netuid_to: int = 128
-
 
 class Command(BaseCommand):
-    help = "Generate dummy Discord channels, users, opinions, and upvotes for local/dev testing."
+    help = "Generate dummy subnet instances, users, opinions, and upvotes for local/dev testing."
 
     def add_arguments(self, parser):
         parser.add_argument("--seed", type=int, default=12345, help="Random seed for deterministic generation.")
         parser.add_argument("--user-id-from", type=int, default=1, help="First DiscordUser.id (inclusive).")
         parser.add_argument("--user-id-to", type=int, default=1000, help="Last DiscordUser.id (inclusive).")
-        parser.add_argument(
-            "--netuid-from",
-            type=int,
-            default=1,
-            help="First subnet netuid to ensure DiscordChannel exists for (inclusive).",
-        )
-        parser.add_argument(
-            "--netuid-to",
-            type=int,
-            default=128,
-            help="Last subnet netuid to ensure DiscordChannel exists for (inclusive).",
-        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -107,15 +92,11 @@ class Command(BaseCommand):
             seed=options.get("seed"),
             user_id_from=options.get("user_id_from"),
             user_id_to=options.get("user_id_to"),
-            netuid_from=options.get("netuid_from"),
-            netuid_to=options.get("netuid_to"),
         )
         rng = random.Random(cfg.seed)  # noqa: S311
 
         if cfg.user_id_from <= 0 or cfg.user_id_to < cfg.user_id_from:
             raise CommandError("--user-id-from must be > 0 and --user-id-to must be >= --user-id-from")
-        if cfg.netuid_from <= 0 or cfg.netuid_to < cfg.netuid_from:
-            raise CommandError("--netuid-from must be > 0 and --netuid-to must be >= --netuid-from")
 
         roles = list(DiscordRole.objects.all())
         if not roles:
@@ -124,28 +105,11 @@ class Command(BaseCommand):
         now = timezone.now()
         month_ago = now - timedelta(days=30)
 
-        # 0) Ensure channels for netuid range exist (create ONLY for netuids that are not present yet)
-        netuids_in_range = list(range(cfg.netuid_from, cfg.netuid_to + 1))
-        existing_netuids = set(
-            DiscordChannel.objects.filter(netuid__in=netuids_in_range).values_list("netuid", flat=True)
+        subnet_instances = list(
+            SubnetInstance.objects.filter(is_archived=False).order_by("netuid").only("id", "netuid", "name")
         )
-
-        channels_to_create: list[DiscordChannel] = []
-        for netuid in netuids_in_range:
-            if netuid in existing_netuids:
-                continue
-            channels_to_create.append(DiscordChannel(id=netuid, netuid=netuid, name=f"Subnet {netuid}"))
-
-        if channels_to_create:
-            DiscordChannel.objects.bulk_create(channels_to_create, batch_size=1000)
-
-        channels = list(
-            DiscordChannel.objects.filter(netuid__gte=cfg.netuid_from, netuid__lte=cfg.netuid_to)
-            .order_by("netuid")
-            .only("id", "netuid", "name")
-        )
-        if not channels:
-            raise CommandError("No DiscordChannel found after creation attempt. Check DB constraints/migrations.")
+        if not subnet_instances:
+            raise CommandError("No active SubnetInstance found.")
 
         # 1) Create users in the given id range if missing (do not error if some already exist)
         users_to_create: list[DiscordUser] = []
@@ -180,37 +144,39 @@ class Command(BaseCommand):
         ).delete()
 
         # 4) Create random number of opinions per user:
-        #    - 1..number_of_channels
-        #    - max 1 per channel
-        #    - pick channels with non-uniform distribution (global channel popularity weights)
-        num_channels = len(channels)
+        #    - 1..number_of_subnet_instances
+        #    - max 1 per subnet instance
+        #    - pick subnet instances with non-uniform distribution (global subnet instance popularity weights)
+        num_subnet_instances = len(subnet_instances)
 
-        # Zipf-ish popularity for channels (lower netuid tends to get more opinions, but still randomized)
-        # Shuffle channel "ranks" once so it's not always the same netuids that are popular.
-        channel_ranked = list(channels)
-        rng.shuffle(channel_ranked)
-        channel_weights_ranked = [1.0 / ((i + 1) ** 1.15) for i in range(num_channels)]
-        channel_weight_by_id = {ch.id: w for ch, w in zip(channel_ranked, channel_weights_ranked, strict=True)}
+        # Zipf-ish popularity for subnet instances (lower netuid tends to get more opinions, but still randomized)
+        # Shuffle subnet instance "ranks" once so it's not always the same netuids that are popular.
+        subnet_instance_ranked = list(subnet_instances)
+        rng.shuffle(subnet_instance_ranked)
+        subnet_instance_weights_ranked = [1.0 / ((i + 1) ** 1.15) for i in range(num_subnet_instances)]
+        subnet_instance_weight_by_id = {
+            ch.id: w for ch, w in zip(subnet_instance_ranked, subnet_instance_weights_ranked, strict=True)
+        }
 
         opinions_to_create: list[Opinion] = []
         opinion_created_at: list[tuple[Opinion, timezone.datetime]] = []
 
-        # also keep counts per channel for later upvote channel weighting
-        opinions_count_by_channel_id = {ch.id: 0 for ch in channels}
+        # also keep counts per subnet instance for later upvote subnet instance weighting
+        opinions_count_by_subnet_instance_id = {ch.id: 0 for ch in subnet_instances}
 
-        channel_ids = [ch.id for ch in channels]
-        channel_weights = [channel_weight_by_id[ch_id] for ch_id in channel_ids]
+        subnet_instance_ids = [ch.id for ch in subnet_instances]
+        subnet_instance_weights = [subnet_instance_weight_by_id[ch_id] for ch_id in subnet_instance_ids]
 
         for u in users:
             has_role = u.id in even_user_ids
             visibility = Opinion.Visibility.FEATURED if has_role else Opinion.Visibility.HIDDEN
 
-            k = rng.randint(1, num_channels)
-            picked_channel_ids = _weighted_sample_without_replacement(
-                channel_ids, k=k, weights=channel_weights, rng=rng
+            k = rng.randint(1, num_subnet_instances)
+            picked_subnet_instance_ids = _weighted_sample_without_replacement(
+                subnet_instance_ids, k=k, weights=subnet_instance_weights, rng=rng
             )
 
-            for ch_id in picked_channel_ids:
+            for ch_id in picked_subnet_instance_ids:
                 emoji = rng.choice(_EMOJIS)
 
                 # 50% short (10..100), 50% long (100..2000)
@@ -219,7 +185,7 @@ class Command(BaseCommand):
                 created_at = _random_dt_between(month_ago, now, rng=rng)
 
                 opinion = Opinion(
-                    channel_id=ch_id,
+                    subnet_instance_id=ch_id,
                     author_id=u.id,
                     emoji=emoji,
                     content=content,
@@ -228,7 +194,7 @@ class Command(BaseCommand):
                 )
                 opinions_to_create.append(opinion)
                 opinion_created_at.append((opinion, created_at))
-                opinions_count_by_channel_id[ch_id] += 1
+                opinions_count_by_subnet_instance_id[ch_id] += 1
 
         Opinion.objects.bulk_create(opinions_to_create, batch_size=2000)
 
@@ -238,24 +204,26 @@ class Command(BaseCommand):
             Opinion.objects.bulk_update(opinions_to_create, ["created_at"], batch_size=2000)
 
         # 5) Create random number of upvotes per user:
-        #    - 1..number_of_channels
-        #    - 1 per channel
-        #    - pick channels weighted by number of opinions in each channel (per current generation)
-        #    - within each channel, keep “skewed popularity” like before (Zipf on a randomized ranking),
-        #      but computed separately per channel.
-        # Re-fetch opinions we just created for those users to get ids (and to build per-channel pools).
+        #    - 1..number_of_subnet_instances
+        #    - 1 per subnet instance
+        #    - pick subnet instances weighted by number of opinions in each subnet instance (per current generation)
+        #    - within each subnet instance, keep “skewed popularity” like before (Zipf on a randomized ranking),
+        #      but computed separately per subnet instance.
+        # Re-fetch opinions we just created for those users to get ids (and to build per-subnet instance pools).
         created_opinions = list(
             Opinion.objects.filter(author_id__gte=cfg.user_id_from, author_id__lte=cfg.user_id_to).only(
-                "id", "author_id", "channel_id"
+                "id", "author_id", "subnet_instance_id"
             )
         )
 
-        opinions_by_channel_id: dict[int, list[Opinion]] = {ch.id: [] for ch in channels}
+        opinions_by_subnet_instance_id: dict[int, list[Opinion]] = {ch.id: [] for ch in subnet_instances}
         for op in created_opinions:
-            if op.channel_id in opinions_by_channel_id:
-                opinions_by_channel_id[op.channel_id].append(op)
+            if op.subnet_instance_id in opinions_by_subnet_instance_id:
+                opinions_by_subnet_instance_id[op.subnet_instance_id].append(op)
 
-        upvote_channel_weights = [float(opinions_count_by_channel_id[ch_id]) for ch_id in channel_ids]
+        upvote_subnet_instance_weights = [
+            float(opinions_count_by_subnet_instance_id[ch_id]) for ch_id in subnet_instance_ids
+        ]
 
         upvotes_to_create: list[Upvote] = []
         upvote_created_at: list[tuple[Upvote, timezone.datetime]] = []
@@ -264,13 +232,13 @@ class Command(BaseCommand):
             has_role = u.id in even_user_ids
             visibility = Upvote.Visibility.FEATURED if has_role else Upvote.Visibility.HIDDEN
 
-            k = rng.randint(1, num_channels)
-            picked_channels_for_upvotes = _weighted_sample_without_replacement(
-                channel_ids, k=k, weights=upvote_channel_weights, rng=rng
+            k = rng.randint(1, num_subnet_instances)
+            picked_subnet_instances_for_upvotes = _weighted_sample_without_replacement(
+                subnet_instance_ids, k=k, weights=upvote_subnet_instance_weights, rng=rng
             )
 
-            for ch_id in picked_channels_for_upvotes:
-                pool = opinions_by_channel_id.get(ch_id) or []
+            for ch_id in picked_subnet_instances_for_upvotes:
+                pool = opinions_by_subnet_instance_id.get(ch_id) or []
                 if not pool:
                     continue
 
@@ -279,7 +247,7 @@ class Command(BaseCommand):
                 if pool_non_self:
                     pool = pool_non_self
 
-                # Skew within channel: randomize who becomes "popular" in THIS channel, then Zipf weights by rank.
+                # Skew within subnet instance: randomize who becomes "popular" in THIS subnet instance, then Zipf weights by rank.
                 ranked = list(pool)
                 rng.shuffle(ranked)
                 weights = [1.0 / ((i + 1) ** cfg.alpha) for i in range(len(ranked))]
@@ -288,7 +256,7 @@ class Command(BaseCommand):
                 created_at = _random_dt_between(month_ago, now, rng=rng)
 
                 upvote = Upvote(
-                    channel_id=ch_id,
+                    subnet_instance_id=ch_id,
                     author_id=u.id,
                     opinion_id=opinion.id,
                     visibility=visibility,
@@ -307,7 +275,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 "Done.\n"
-                f"- Channels ensured: netuid {cfg.netuid_from}..{cfg.netuid_to} (count {len(channels)})\n"
+                f"- Subnet instances used: {len(subnet_instances)}\n"
                 f"- Users ensured: ids {cfg.user_id_from}..{cfg.user_id_to} (count {len(users)})\n"
                 f"- UserRoles created (even ids, ignore_conflicts): {len(user_roles_to_create)}\n"
                 f"- Deleted (scoped to user id range): upvotes={upvotes_deleted}, opinions={opinions_deleted}\n"
