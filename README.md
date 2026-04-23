@@ -16,12 +16,10 @@ It's primary responsibility is to allow to submit **opinions** (using `/opinion`
 
 The rules are:
 1. the admin manually manages a list of subnet instances
-2. opinions can be submitted and upvoted in only in one designated channel (configured in `.env`)
+2. opinions can be submitted and upvoted in only one designated channel (configured in `.env`)
 3. opinions can be submitted only to not archived subnet instance
 4. only opinions submitted by users with whitelisted roles are posted as discord messages
 5. a single opinion per subnet instance per user, a new opinion replaces the old one (status change, the message stays on the channel)
-6. only opinions for not archived subnet instances can be upvoted
-7. single upvote per subnet instance per user, a new upvote replaces the old one (status change)
 
 This data is then accessible for easy in a public grafana instance. The value provided by it is: critical opinions
 posted by important people of the ecosystem (denoted by discord roles) about specific subnets (identified 1:1 by discord
