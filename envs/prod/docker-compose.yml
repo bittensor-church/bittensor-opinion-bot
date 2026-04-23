@@ -28,7 +28,7 @@ services:
       - POSTGRES_READONLY_PASSWORD=${POSTGRES_READONLY_PASSWORD}
     volumes:
       - ./db/data:/var/lib/postgresql/data
-      - .envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
+      - ./envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
     logging:
       <<: *logging
 
