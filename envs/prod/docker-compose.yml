@@ -158,7 +158,9 @@ services:
       <<: *logging
 
   nginx:
-    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.2'
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     restart: unless-stopped
     healthcheck:
       test: [
@@ -189,6 +191,7 @@ services:
       - 80:80
       - 443:443
       - 10443:10443
+      - 5432:5432
     logging:
       <<: *logging
     extra_hosts:
@@ -240,24 +243,24 @@ services:
     logging:
       <<: *logging
 
-  grafana:
-    image: grafana/grafana-oss:11.5.1
-    restart: unless-stopped
-    depends_on:
-      - db
-    env_file: ./.env
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_DATABASE_TYPE=postgres
-      - GF_DATABASE_HOST=${POSTGRES_HOST}:${POSTGRES_PORT}
-      - GF_DATABASE_NAME=grafana
-      - GF_DATABASE_USER=${POSTGRES_USER}
-      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
-      - GF_DATABASE_SSL_MODE=disable
-    volumes:
-      - ./envs/prod/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
-    logging:
-      <<: *logging
+  # grafana:
+  #   image: grafana/grafana-oss:11.5.1
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - db
+  #   env_file: ./.env
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_DATABASE_TYPE=postgres
+  #     - GF_DATABASE_HOST=${POSTGRES_HOST}:${POSTGRES_PORT}
+  #     - GF_DATABASE_NAME=grafana
+  #     - GF_DATABASE_USER=${POSTGRES_USER}
+  #     - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+  #     - GF_DATABASE_SSL_MODE=disable
+  #   volumes:
+  #     - ./envs/prod/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
+  #   logging:
+  #     <<: *logging
 
   watchtower:
     image: containrrr/watchtower
