@@ -24,9 +24,11 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_READONLY_USER=${POSTGRES_READONLY_USER}
+      - POSTGRES_READONLY_PASSWORD=${POSTGRES_READONLY_PASSWORD}
     volumes:
       - ./db/data:/var/lib/postgresql/data
-      - ../common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
+      - .envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
     logging:
       <<: *logging
 

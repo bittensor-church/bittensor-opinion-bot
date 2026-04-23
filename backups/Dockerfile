@@ -1,4 +1,4 @@
-FROM postgres:17
+FROM postgres:17.9-alpine3.23
 WORKDIR /root
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY --from=getsentry/sentry-cli:latest /bin/sentry-cli /bin/
