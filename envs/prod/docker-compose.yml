@@ -15,7 +15,7 @@ services:
         tag: '{{.Name}}'
 
   db:
-    image: postgres:14.0-alpine
+    image: mirror.gcr.io/postgres:17.9-bookworm
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     restart: unless-stopped

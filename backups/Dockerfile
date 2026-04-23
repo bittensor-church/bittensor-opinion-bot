@@ -1,8 +1,8 @@
-FROM postgres:17.9-alpine3.23
+FROM postgres:17.9-bookworm
 WORKDIR /root
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY --from=getsentry/sentry-cli:latest /bin/sentry-cli /bin/
-RUN apt-get update && apt-get install -y python3.11 cron zstd
+RUN apt-get update && apt-get install -y cron zstd
 COPY --chmod=0755 docker-entrypoint.sh /
 COPY --chmod=0644 cron.d/backup /etc/cron.d/backup
 COPY bin ./
