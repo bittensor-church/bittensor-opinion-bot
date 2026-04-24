@@ -9,19 +9,20 @@ upstream gunicorn {
     server unix:/var/run/gunicorn/gunicorn.sock fail_timeout=0;
 }
 
-server {
-    listen 80 default_server;
-    server_name _;
-    server_name_in_redirect off;
+# TODO: revert when 5432 is open
+# server {
+#     listen 80 default_server;
+#     server_name _;
+#     server_name_in_redirect off;
+#
+#     return 444;
+# }
 
-    return 444;
-}
-
-server {
-    listen 80;
-    server_name ${NGINX_HOST} grafana.${NGINX_HOST};
-    return 301 https://$host$request_uri;
-}
+# server {
+#     listen 80;
+#     server_name ${NGINX_HOST} grafana.${NGINX_HOST};
+#     return 301 https://$host$request_uri;
+# }
 
 server {
     listen 443 ssl default_server;

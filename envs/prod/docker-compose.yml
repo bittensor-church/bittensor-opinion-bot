@@ -163,10 +163,11 @@ services:
       dockerfile: nginx/Dockerfile
     restart: unless-stopped
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "curl 0.0.0.0:80/alive/ -s --fail -H \"Host: $NGINX_HOST\" -H \"User-Agent: docker-compose-healthcheck\" -o /dev/null || exit 1"
-      ]
+      # TODO: revert when 5432 is open
+      # test: [
+      #   "CMD-SHELL",
+      #   "curl 0.0.0.0:80/alive/ -s --fail -H \"Host: $NGINX_HOST\" -H \"User-Agent: docker-compose-healthcheck\" -o /dev/null || exit 1"
+      # ]
       interval: 30s
       retries: 5
       start_period: 20s
@@ -190,8 +191,8 @@ services:
     ports:
       - 80:80
       - 443:443
-      - 10443:10443
       - 5432:5432
+      - 10443:10443
     logging:
       <<: *logging
     extra_hosts:
