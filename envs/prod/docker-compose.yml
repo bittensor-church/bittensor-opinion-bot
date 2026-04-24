@@ -181,6 +181,7 @@ services:
       - ./media:/srv/media:ro
       - ./letsencrypt/etc:/etc/letsencrypt
       - ./nginx/monitoring_certs:/etc/monitoring_certs:ro
+      - ./nginx/db_access_certs:/etc/db_access_certs:ro
       - gunicorn-socket:/var/run/gunicorn:ro
     depends_on:
       - app
