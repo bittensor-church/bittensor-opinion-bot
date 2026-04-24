@@ -19,14 +19,14 @@ openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.crt -subj "
 
 ```sh
 openssl genrsa -out server.key 4096
-openssl req -new -key server.key -out server.csr -subj "/CN=<db-hostname>"
+openssl req -new -key server.key -out server.csr -subj "/CN=opinion-bot.bittensor.church"
 ```
 
 3. Sign server certificate with SAN for your DB hostname:
 
 ```sh
 cat > server.ext <<'EOF'
-subjectAltName=DNS:<db-hostname>
+subjectAltName=DNS:opinion-bot.bittensor.church
 extendedKeyUsage=serverAuth
 EOF
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -sha256 -extfile server.ext
@@ -36,7 +36,7 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out s
 
 ```sh
 openssl genrsa -out client.key 4096
-openssl req -new -key client.key -out client.csr -subj "/CN=<client-name>"
+openssl req -new -key client.key -out client.csr -subj "/CN=internal.grafana.bittensor.church"
 ```
 
 5. Sign client certificate:

@@ -16,6 +16,9 @@ services:
 
   db:
     image: mirror.gcr.io/postgres:17.9-bookworm
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     restart: unless-stopped
@@ -29,6 +32,11 @@ services:
     volumes:
       - ./db/data:/var/lib/postgresql/data
       - ./envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
+      - ./envs/prod/db/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./envs/prod/db/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./db_access_certs:/etc/postgresql/db_access_certs:ro
+    ports:
+      - 80:5432
     logging:
       <<: *logging
 
@@ -158,9 +166,7 @@ services:
       <<: *logging
 
   nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
+    image: ghcr.io/reef-technologies/nginx-rt:v1.2.2
     restart: unless-stopped
     healthcheck:
       # TODO: revert when 5432 is open
@@ -190,9 +196,8 @@ services:
       - backups
     command: nginx -g 'daemon off;'
     ports:
-      - 80:80
+      # - 80:80
       - 443:443
-      - 5432:5432
       - 10443:10443
     logging:
       <<: *logging
