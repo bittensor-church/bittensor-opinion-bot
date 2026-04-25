@@ -15,7 +15,10 @@ services:
         tag: '{{.Name}}'
 
   db:
-    image: postgres:14.0-alpine
+    image: mirror.gcr.io/postgres:17.9-bookworm
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     restart: unless-stopped
@@ -24,8 +27,16 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_READONLY_USER=${POSTGRES_READONLY_USER}
+      - POSTGRES_READONLY_PASSWORD=${POSTGRES_READONLY_PASSWORD}
     volumes:
       - ./db/data:/var/lib/postgresql/data
+      - ./envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
+      - ./envs/prod/db/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./envs/prod/db/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./db_access_certs:/etc/postgresql/db_access_certs:ro
+    ports:
+      - 80:5432
     logging:
       <<: *logging
 
@@ -85,6 +96,22 @@ services:
     logging:
       <<: *logging
 
+  discord-bot:
+    image: opinion_bot/app
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/discord-bot
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    command: python manage.py runbot
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+
   celery-worker:
     image: opinion_bot/app
     init: true
@@ -101,6 +128,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - db
     logging:
       <<: *logging
 
@@ -138,13 +166,14 @@ services:
       <<: *logging
 
   nginx:
-    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.2'
+    image: ghcr.io/reef-technologies/nginx-rt:v1.2.2
     restart: unless-stopped
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "curl 0.0.0.0:80/alive/ -s --fail -H \"Host: $NGINX_HOST\" -H \"User-Agent: docker-compose-healthcheck\" -o /dev/null || exit 1"
-      ]
+      # TODO: revert when 5432 is open
+      # test: [
+      #   "CMD-SHELL",
+      #   "curl 0.0.0.0:80/alive/ -s --fail -H \"Host: $NGINX_HOST\" -H \"User-Agent: docker-compose-healthcheck\" -o /dev/null || exit 1"
+      # ]
       interval: 30s
       retries: 5
       start_period: 20s
@@ -152,20 +181,22 @@ services:
     environment:
       - NGINX_HOST=${NGINX_HOST}
     volumes:
-      - ./nginx/templates:/etc/nginx/templates
-      - ./nginx/config_helpers:/etc/nginx/config_helpers
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/config_helpers:/etc/nginx/config_helpers:ro
       - backend-static:/srv/static:ro
       - ./media:/srv/media:ro
       - ./letsencrypt/etc:/etc/letsencrypt
-      - ./nginx/monitoring_certs:/etc/monitoring_certs
+      - ./nginx/monitoring_certs:/etc/monitoring_certs:ro
+      - ./nginx/db_access_certs:/etc/db_access_certs:ro
       - gunicorn-socket:/var/run/gunicorn:ro
     depends_on:
       - app
       - cadvisor
       - node-exporter
+      - backups
     command: nginx -g 'daemon off;'
     ports:
-      - 80:80
+      # - 80:80
       - 443:443
       - 10443:10443
     logging:
@@ -218,9 +249,31 @@ services:
       - nodeexporter_collectors:/app/metrics
     logging:
       <<: *logging
+
+  # grafana:
+  #   image: grafana/grafana-oss:11.5.1
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - db
+  #   env_file: ./.env
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_DATABASE_TYPE=postgres
+  #     - GF_DATABASE_HOST=${POSTGRES_HOST}:${POSTGRES_PORT}
+  #     - GF_DATABASE_NAME=grafana
+  #     - GF_DATABASE_USER=${POSTGRES_USER}
+  #     - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+  #     - GF_DATABASE_SSL_MODE=disable
+  #   volumes:
+  #     - ./envs/prod/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
+  #   logging:
+  #     <<: *logging
+
   watchtower:
     image: containrrr/watchtower
     restart: unless-stopped
+    environment:
+      - DOCKER_API_VERSION=1.54
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command: --interval 7200 vulnrelay

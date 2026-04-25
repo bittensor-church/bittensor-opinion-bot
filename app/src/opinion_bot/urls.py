@@ -8,10 +8,12 @@ from .api.routers import router as api_router
 from .opinion_bot.business_metrics import metrics_manager
 from .opinion_bot.consumers import DefaultConsumer
 from .opinion_bot.metrics import metrics_view
+from .opinion_bot.views import redirect_to_grafana_opinions
 
 urlpatterns = [
     path("alive/", lambda _: HttpResponse(b"ok")),
     path("admin/", site.urls),
+    path("opinions/", redirect_to_grafana_opinions),
     re_path(r"^api/(?P<version>v0)/", include(api_router.urls)),
     re_path(r"^api/(?P<version>v0)/schema/$", SpectacularAPIView.as_view(), name="schema"),
     re_path(r"^api/(?P<version>v0)/schema/swagger-ui/$", SpectacularSwaggerView.as_view(url_name="schema")),

@@ -18,3 +18,5 @@ media/
 .terraform/
 .nox/
 __pycache__
+*.key
+/nginx/db_access_certs/

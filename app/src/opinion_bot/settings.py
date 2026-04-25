@@ -271,7 +271,7 @@ REDIS_PORT = env.int("REDIS_PORT")
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
-CONSTANCE_CONFIG = {
+CONSTANCE_CONFIG = {  # type: ignore
     # "PARAMETER": (default-value, "Help text", type),
 }
 
@@ -369,6 +369,16 @@ LOGGING = {
         },
     },
 }
+
+CONNECT_TO_DISCORD = env.bool("CONNECT_TO_DISCORD", False)
+if CONNECT_TO_DISCORD:
+    DISCORD_BOT_TOKEN = env.str("DISCORD_BOT_TOKEN")
+    DISCORD_GUILD_ID = env.int("DISCORD_GUILD_ID")
+    DISCORD_CHANNEL_ID = env.int("DISCORD_CHANNEL_ID")
+
+OPINIONS_URL = env.str("OPINIONS_URL")
+OPINION_DETAILS_REDIRECT_URL = env.str("OPINION_DETAILS_REDIRECT_URL")
+OPINIONS_REDIRECT_URL = env.str("OPINIONS_REDIRECT_URL")
 
 
 def configure_structlog():

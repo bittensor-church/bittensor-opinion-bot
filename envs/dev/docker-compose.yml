@@ -7,20 +7,40 @@ services:
     healthcheck:
       test: valkey-cli ping
     volumes:
-      - ./redis/data:/data
+      - redis:/data
     ports:
       - ${REDIS_PORT}:6379
 
   db:
-    image: mirror.gcr.io/postgres:14.0-alpine
+    image: mirror.gcr.io/postgres:17.9-bookworm
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_READONLY_USER=${POSTGRES_READONLY_USER}
+      - POSTGRES_READONLY_PASSWORD=${POSTGRES_READONLY_PASSWORD}
     volumes:
       - ./db/data:/var/lib/postgresql/data
+      - ./envs/common/db/init-grafana-db.sql:/docker-entrypoint-initdb.d/init-grafana-db.sql
     ports:
       - ${POSTGRES_PORT}:5432
 
+  # grafana:
+  #   image: grafana/grafana-oss:11.5.1
+  #   depends_on:
+  #     - db
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+  #     - POSTGRES_DB=${POSTGRES_DB}
+  #     - POSTGRES_USER=${POSTGRES_USER}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #   volumes:
+  #     - ./envs/dev/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
+  #   ports:
+  #     - 3000:3000
+
+volumes:
+  db:
+  redis:

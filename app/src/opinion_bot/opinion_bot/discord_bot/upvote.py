@@ -1,0 +1,77 @@
+from django.conf import settings
+
+from opinion_bot.opinion_bot.discord_bot.discord_interaction_sdk_api import DiscordInteractionSdkAPI
+from opinion_bot.opinion_bot.discord_bot.domain import DiscordEventOutcome, OpinionUpvoteEvent
+from opinion_bot.opinion_bot.discord_bot.exceptions import BotRuntimeError
+from opinion_bot.opinion_bot.discord_bot.persistence import (
+    any_key_role,
+    get_opinion_by_id,
+    get_opinion_by_message_id,
+    get_subnet_instance_by_id,
+    get_user_valid_upvotes_for_subnet_instance,
+    save_upvote,
+)
+from opinion_bot.opinion_bot.discord_bot.utils import create_masked_opinion_url
+
+
+async def handle_opinion_upvote_event(
+    *,
+    event: OpinionUpvoteEvent,
+    discord_interaction_sdk_adapter: DiscordInteractionSdkAPI,
+) -> DiscordEventOutcome:
+    await discord_interaction_sdk_adapter.defer_ephemeral()
+
+    if event.channel_id != settings.DISCORD_CHANNEL_ID:
+        await discord_interaction_sdk_adapter.followup_ephemeral("Upvoting opinions is not allowed in this channel.")
+        return "rejected"
+
+    if event.message_id:
+        opinion = await get_opinion_by_message_id(event.message_id)
+    else:
+        opinion = await get_opinion_by_id(event.opinion_id)
+
+    if opinion is None:
+        await discord_interaction_sdk_adapter.followup_ephemeral("Unknown opinion.")
+        return "rejected"
+
+    subnet_instance = await get_subnet_instance_by_id(opinion.subnet_instance_id)
+
+    if subnet_instance is None:
+        raise BotRuntimeError(f"Subnet instance {opinion.subnet_instance_id} not found")
+
+    if subnet_instance.is_archived:
+        await discord_interaction_sdk_adapter.followup_ephemeral(
+            "You can't upvote opinions about archived subnet instance."
+        )
+        return "rejected"
+
+    if opinion.author_id == event.user.user_id:
+        await discord_interaction_sdk_adapter.followup_ephemeral("You can't upvote your own opinion.")
+        return "rejected"
+
+    previous_upvotes = await get_user_valid_upvotes_for_subnet_instance(
+        user_id=event.user.user_id, subnet_instance_id=opinion.subnet_instance_id
+    )
+
+    if opinion.id in [upvote.opinion_id for upvote in previous_upvotes]:
+        await discord_interaction_sdk_adapter.followup_ephemeral("You have already upvoted this opinion.")
+        return "rejected"
+
+    is_featured = await any_key_role(event.user.roles_ids)
+
+    await save_upvote(
+        event=event,
+        opinion=opinion,
+        is_featured=is_featured,
+        previous_upvotes_ids=[upvote.id for upvote in previous_upvotes],
+    )
+
+    opinion_url = create_masked_opinion_url(opinion.id)
+    if previous_upvotes:
+        previous_opinion_url = create_masked_opinion_url(previous_upvotes[0].opinion_id)
+        confirmation_message = f"Upvote moved from {previous_opinion_url} to {opinion_url}"
+    else:
+        confirmation_message = f"Opinion {opinion_url} upvoted"
+
+    await discord_interaction_sdk_adapter.followup_ephemeral(confirmation_message)
+    return "success"
