@@ -36,7 +36,7 @@ services:
       - ./envs/prod/db/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       - ./db_access_certs:/etc/postgresql/db_access_certs:ro
     ports:
-      - 80:5432
+      - 5432:5432
     logging:
       <<: *logging
 
@@ -196,7 +196,7 @@ services:
       - backups
     command: nginx -g 'daemon off;'
     ports:
-      # - 80:80
+      - 80:80
       - 443:443
       - 10443:10443
     logging:
