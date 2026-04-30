@@ -249,25 +249,6 @@ services:
     logging:
       <<: *logging
 
-  # grafana:
-  #   image: grafana/grafana-oss:11.5.1
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - db
-  #   env_file: ./.env
-  #   environment:
-  #     - GF_SECURITY_ADMIN_PASSWORD=admin
-  #     - GF_DATABASE_TYPE=postgres
-  #     - GF_DATABASE_HOST=${POSTGRES_HOST}:${POSTGRES_PORT}
-  #     - GF_DATABASE_NAME=grafana
-  #     - GF_DATABASE_USER=${POSTGRES_USER}
-  #     - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
-  #     - GF_DATABASE_SSL_MODE=disable
-  #   volumes:
-  #     - ./envs/prod/grafana/provisioning/datasources/postgres.yml:/etc/grafana/provisioning/datasources/postgres.yml
-  #   logging:
-  #     <<: *logging
-
   watchtower:
     image: containrrr/watchtower
     restart: unless-stopped
