@@ -23,6 +23,18 @@ def set_readonly_permissions(_apps, schema_editor):
                 || ' TO '
                 || quote_ident(%(user)s);
               EXECUTE 'GRANT USAGE ON SCHEMA public TO ' || quote_ident(%(user)s);
+              IF to_regclass('public.opinion_bot_discorduser') IS NOT NULL THEN
+                EXECUTE 'GRANT SELECT ON TABLE public.opinion_bot_discorduser TO ' || quote_ident(%(user)s);
+              END IF;
+              IF to_regclass('public.opinion_bot_discordrole') IS NOT NULL THEN
+                EXECUTE 'GRANT SELECT ON TABLE public.opinion_bot_discordrole TO ' || quote_ident(%(user)s);
+              END IF;
+              IF to_regclass('public.opinion_bot_userrole') IS NOT NULL THEN
+                EXECUTE 'GRANT SELECT ON TABLE public.opinion_bot_userrole TO ' || quote_ident(%(user)s);
+              END IF;
+              IF to_regclass('public.opinion_bot_subnetinstance') IS NOT NULL THEN
+                EXECUTE 'GRANT SELECT ON TABLE public.opinion_bot_subnetinstance TO ' || quote_ident(%(user)s);
+              END IF;
               IF to_regclass('public.opinion_bot_opinion') IS NOT NULL THEN
                 EXECUTE 'GRANT SELECT ON TABLE public.opinion_bot_opinion TO ' || quote_ident(%(user)s);
               END IF;
@@ -45,8 +57,24 @@ def unset_readonly_permissions(_apps, schema_editor):
             DO $$
             BEGIN
               IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = %(user)s) THEN
-                EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_opinion FROM ' || quote_ident(%(user)s);
-                EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_upvote FROM ' || quote_ident(%(user)s);
+                IF to_regclass('public.opinion_bot_discorduser') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_discorduser FROM ' || quote_ident(%(user)s);
+                END IF;
+                IF to_regclass('public.opinion_bot_discordrole') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_discordrole FROM ' || quote_ident(%(user)s);
+                END IF;
+                IF to_regclass('public.opinion_bot_userrole') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_userrole FROM ' || quote_ident(%(user)s);
+                END IF;
+                IF to_regclass('public.opinion_bot_subnetinstance') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_subnetinstance FROM ' || quote_ident(%(user)s);
+                END IF;
+                IF to_regclass('public.opinion_bot_opinion') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_opinion FROM ' || quote_ident(%(user)s);
+                END IF;
+                IF to_regclass('public.opinion_bot_upvote') IS NOT NULL THEN
+                  EXECUTE 'REVOKE SELECT ON TABLE public.opinion_bot_upvote FROM ' || quote_ident(%(user)s);
+                END IF;
                 EXECUTE 'REVOKE USAGE ON SCHEMA public FROM ' || quote_ident(%(user)s);
                 EXECUTE 'REVOKE CONNECT ON DATABASE '
                   || quote_ident(current_database())
