@@ -1,3 +1,4 @@
+import json
 import sys
 
 from django.core.management.base import BaseCommand
@@ -5,19 +6,13 @@ from django.core.management.base import BaseCommand
 
 class Command(BaseCommand):
     help = (
-        "A dev only tool for parsing the subnet list obtained by "
-        "`btcli subnet list --subtensor.network finney` "
+        "A dev only tool for parsing the subnet list obtained by `btcli subnet list --json.out` "
         "and producing a dict that can be used in create_subnet_instances.py"
     )
 
     def handle(self, *args, **options):
-        res = dict()
-        for line in sys.stdin:
-            parts = line.rstrip("\n").split("│")
-            if len(parts) >= 2:
-                netuid = int(parts[0].strip())
-                name = parts[1].strip()
-                if 1 <= netuid <= 128:
-                    res[netuid] = name
-
-        print(res)
+        data = json.load(sys.stdin)
+        for netuid in data["subnets"]:
+            if netuid != "0":
+                name = data["subnets"][netuid]["subnet_name"]
+                print(f'{netuid}: "{name}",')
