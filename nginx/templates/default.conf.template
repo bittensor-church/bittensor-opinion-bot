@@ -13,14 +13,13 @@ server {
     listen 80 default_server;
     server_name _;
     server_name_in_redirect off;
-
     return 444;
 }
 
 server {
     listen 80;
-    server_name ${NGINX_HOST};
-    return 301 https://${NGINX_HOST}$request_uri;
+    server_name ${NGINX_HOST}
+    return 301 https://$host$request_uri;
 }
 
 server {

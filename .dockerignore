@@ -7,7 +7,6 @@
 /redis/
 /db/
 /letsencrypt/
-/nginx/
 .env
 .venv
 venv
